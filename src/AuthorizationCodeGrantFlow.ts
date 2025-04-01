@@ -102,6 +102,7 @@ const onIncomingRedirect = async () => {
     idp === null ||
     url.searchParams.get("iss") != idp + (idp.endsWith("/") ? "" : "/")
     // TODO do we need to check within the token?
+    // In OpenID Connect [OIDC.Core] flows where an ID Token is returned from the authorization endpoint, the value in the iss parameter MUST always be identical to the iss claim in the ID Token.
   ) {
     throw new Error(
       "RFC 9207 - iss != idp - " + url.searchParams.get("iss") + " != " + idp
