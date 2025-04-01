@@ -11,7 +11,9 @@ This library implements a very simple version of the Solid OIDC protocol:
 
 ## Example usage in a Vue app
 
-I use [Vue](https://vuejs.org/) for my apps, so here is a quick usage example. It should (TM) work the same with the other frameworks... Let me know.
+I use [Vue](https://vuejs.org/) for my apps. If you want to see how this library is used in a Vue app, look at my [Solid App Template (Vue Edition)](https://github.com/uvdsl/solid-app-template-vue).
+
+Here is a quick usage example. It should (TM) work the same with the other frameworks... Let me know.
 
 ```ts
 import { reactive } from "vue";
