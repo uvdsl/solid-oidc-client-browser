@@ -9,6 +9,12 @@ This library implements a very simple version of the Solid OIDC protocol:
 - [x] RefreshTokenGrant to renew a session
 - [ ] Unsure about storage. Currently, `client_id`, `client_secret`, `refresh_token` and `token_endpoint` are stored in `sessionStorage`. I see that other implementations store the session state in `localStorage` - no idea if that is deemed secure nowadays.
 
+## Installation: npm package
+
+```sh
+npm install @uvdsl/solid-oidc-client-browser
+```
+
 ## Example usage in a Vue app
 
 I use [Vue](https://vuejs.org/) for my apps. If you want to see how this library is used in a Vue app, look at my [Solid App Template (Vue Edition)](https://github.com/uvdsl/solid-app-template-vue).
