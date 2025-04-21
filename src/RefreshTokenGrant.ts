@@ -2,8 +2,10 @@ import {
   GenerateKeyPairResult,
   KeyLike,
   SignJWT,
+  createRemoteJWKSet,
   exportJWK,
   generateKeyPair,
+  jwtVerify,
 } from "jose";
 import { SessionTokenInformation } from "./SessionTokenInformation";
 import axios from "axios";
@@ -28,6 +30,27 @@ const renewTokens = async () => {
       key_pair
     )
   ).data;
+
+  // verify id_token
+  const idToken = token_response["id_token"];
+  const idp = sessionStorage.getItem("idp");
+  if (idp === null) {
+    throw new Error(
+      "ID Token validation preparation - Could not find in sessionStorage: idp"
+    );
+  }
+  const jwks_uri = sessionStorage.getItem("jwks_uri");
+  if (jwks_uri === null) {
+    throw new Error(
+      "ID Token validation preparation - Could not find in sessionStorage: jwks_uri"
+    );
+  }
+  const jwks = createRemoteJWKSet(new URL(jwks_uri));
+  await jwtVerify(idToken, jwks, {
+    issuer: idp,  // RFC 9207
+    audience: client_id, // RFC 7519
+    // exp, nbf, iat - handled automatically
+  });
 
   return {
     ...token_response,

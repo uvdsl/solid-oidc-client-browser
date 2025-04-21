@@ -1,5 +1,5 @@
 import axios from "axios";
-import { generateKeyPair } from "jose";
+import { createRemoteJWKSet, generateKeyPair, jwtVerify } from "jose";
 import { requestDynamicClientRegistration } from "./requestDynamicClientRegistration";
 import { requestAccessToken } from "./requestAccessToken";
 import { SessionTokenInformation } from "./SessionTokenInformation";
@@ -7,7 +7,6 @@ import { SessionTokenInformation } from "./SessionTokenInformation";
 /**
  * Login with the idp, using dynamic client registration.
  * TODO generalise to use a provided client webid
- * TODO generalise to use provided client_id und client_secret
  *
  * @param idp
  * @param redirect_uri
@@ -24,6 +23,12 @@ const redirectForLogin = async (idp: string, redirect_uri: string) => {
     "token_endpoint",
     openid_configuration["token_endpoint"]
   );
+  // remember jwks_uri for later token verification
+  sessionStorage.setItem(
+    "jwks_uri",
+    openid_configuration["jwks_uri"]
+  );
+  // use registration endpoint
   const registration_endpoint = openid_configuration["registration_endpoint"];
 
   // get client registration
@@ -101,8 +106,6 @@ const onIncomingRedirect = async () => {
   if (
     idp === null ||
     url.searchParams.get("iss") != idp + (idp.endsWith("/") ? "" : "/")
-    // TODO do we need to check within the token?
-    // In OpenID Connect [OIDC.Core] flows where an ID Token is returned from the authorization endpoint, the value in the iss parameter MUST always be identical to the iss claim in the ID Token.
   ) {
     throw new Error(
       "RFC 9207 - iss != idp - " + url.searchParams.get("iss") + " != " + idp
@@ -160,6 +163,21 @@ const onIncomingRedirect = async () => {
       key_pair
     )
   ).data;
+
+  // verify id_token
+  const idToken = token_response["id_token"];
+  const jwks_uri = sessionStorage.getItem("jwks_uri");
+  if (jwks_uri === null) {
+    throw new Error(
+      "ID Token validation preparation - Could not find in sessionStorage: jwks_uri"
+    );
+  }
+  const jwks = createRemoteJWKSet(new URL(jwks_uri));
+  await jwtVerify(idToken, jwks, {
+    issuer: idp,  // RFC 9207
+    audience: client_id, // RFC 7519
+    // exp, nbf, iat - handled automatically
+  });
 
   // clean session storage
   // sessionStorage.removeItem("idp");
