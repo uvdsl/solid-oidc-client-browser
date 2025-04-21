@@ -111,10 +111,7 @@ const onIncomingRedirect = async () => {
   // RFC 6749 OAuth 2.0
   if (url.searchParams.get("state") != sessionStorage.getItem("csrf_token")) {
     throw new Error(
-      "RFC 6749 - state != csrf_token - " +
-        url.searchParams.get("iss") +
-        " != " +
-        sessionStorage.getItem("csrf_token")
+      "RFC 6749 - state != csrf_token - " + url.searchParams.get("state") + " != " + sessionStorage.getItem("csrf_token")
     );
   }
   // remove redirect query parameters from URL
@@ -174,7 +171,7 @@ const onIncomingRedirect = async () => {
 
   // remember refresh_token for session
   sessionStorage.setItem("refresh_token", token_response["refresh_token"]);
-  
+
   // return client login information
   return {
     ...token_response,
