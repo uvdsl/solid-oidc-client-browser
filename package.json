@@ -16,7 +16,7 @@
         "compile": "rollup -c",
         "prebuild": "rimraf ./dist",
         "build": "run-s compile",
-        "test": "exit 0",
+        "test": "jest --coverage",
         "postbuild": "node ./scripts/prepare-package-json.js"
     },
     "exports": {
@@ -43,11 +43,13 @@
         "@types/jest": "^29.0.0",
         "@types/n3": "^1.21.1",
         "jest": "^29.0.0",
+        "jest-environment-jsdom": "^29.7.0",
         "npm-run-all2": "^7.0.1",
         "rimraf": "^6.0.1",
         "rollup": "^2.79.2",
         "rollup-plugin-typescript2": "^0.36.0",
         "ts-jest": "^29.0.0",
+        "ts-node": "^10.9.2",
         "tslib": "^2.8.1",
         "typescript": "^5.8.3"
     }
