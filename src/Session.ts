@@ -1,5 +1,4 @@
 import { SignJWT, decodeJwt, exportJWK } from "jose";
-import axios, { AxiosRequestConfig } from "axios";
 import {
   redirectForLogin,
   onIncomingRedirect,
@@ -66,30 +65,47 @@ export class Session {
   }
 
   /**
-   * Make axios requests.
+   * Make fetch requests.
    * If session is established, authenticated requests are made.
    *
-   * @param config the axios config to use (authorization header, dpop header will be overwritten in active session)
+   * @param init the fetch request options (RequestInit) to use (authorization header, dpop header will be overwritten in active session)
    * @param dpopPayload optional, the payload of the dpop token to use (overwrites the default behaviour of `htu=config.url` and `htm=config.method`)
-   * @returns axios response
+   * @returns fetch response
    */
-  async authFetch(config: AxiosRequestConfig<any>, dpopPayload?: any) {
+  async authFetch(input: string | URL | globalThis.Request, init?: RequestInit, dpopPayload?: any) {
     // prepare authenticated call using a DPoP token (either provided payload, or default)
-    const headers = config.headers ? config.headers : {};
-    if (this.tokenInformation) {
-      const requestURL = new URL(config.url!);
-      dpopPayload = dpopPayload
-        ? dpopPayload
-        : {
-            htu: `${requestURL.protocol}//${requestURL.host}${requestURL.pathname}`,
-            htm: config.method,
-          };
-      const dpop = await this.createSignedDPoPToken(dpopPayload);
-      headers["dpop"] = dpop;
-      headers["authorization"] = `DPoP ${this.tokenInformation.access_token}`;
+    let url: URL;
+    let method: string;
+    let headers: Headers;
+
+    if (input instanceof Request) {
+      url = new URL(input.url);
+      method = init?.method || input?.method || 'GET';
+      headers = new Headers(input.headers);
+    } else {
+      init = init || {};
+      url = new URL(input.toString());
+      method = init.method || 'GET';
+      headers = init.headers ? new Headers(init.headers) : new Headers();
     }
-    config.headers = headers;
-    return axios(config);
+
+    // create DPoP token, and add tokens to request
+    if (this.tokenInformation) {
+      dpopPayload = dpopPayload ?? {
+        htu: `${url.origin}${url.pathname}`,
+        htm: method.toUpperCase()
+      };
+      const dpop = await this.createSignedDPoPToken(dpopPayload);
+      headers.set("dpop", dpop);
+      headers.set("authorization", `DPoP ${this.tokenInformation.access_token}`);
+    }
+
+    // check explicitly; to avoid unexpected behaviour
+    if (input instanceof Request) { // clone the provided request, and override the headers
+      return fetch(new Request(input, { ...init, headers }));
+    }
+    // just override the headers
+    return fetch(url, { ...init, headers });
   }
 
   get isActive() {

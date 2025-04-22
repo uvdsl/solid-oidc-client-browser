@@ -9,7 +9,6 @@ import {
   jwtVerify,
 } from "jose";
 import { SessionTokenInformation } from "./SessionTokenInformation";
-import axios from "axios";
 
 const renewTokens = async () => {
   const client_id = sessionStorage.getItem("client_id");
@@ -22,7 +21,7 @@ const renewTokens = async () => {
   }
   // RFC 9449 DPoP
   const key_pair = await generateKeyPair("ES256");
-  const token_response = (
+  const token_response =
     await requestFreshTokens(
       refresh_token,
       client_id,
@@ -30,7 +29,12 @@ const renewTokens = async () => {
       token_endpoint,
       key_pair
     )
-  ).data;
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        return response.json();
+      });
 
   // verify access_token // ! Solid-OIDC specification says it should be a dpop-bound `id token` but implementations provide a dpop-bound `access token`
   const accessToken = token_response["access_token"];
@@ -107,19 +111,20 @@ const requestFreshTokens = async (
     })
     .sign(key_pair.privateKey);
 
-  return axios({
-    url: token_endpoint,
-    method: "post",
-    headers: {
-      authorization: `Basic ${btoa(`${client_id}:${client_secret}`)}`,
-      dpop,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    data: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refresh_token,
-    }),
-  });
+  return fetch(
+    token_endpoint,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Basic ${btoa(`${client_id}:${client_secret}`)}`,
+        dpop,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refresh_token,
+      }),
+    });
 };
 
 export { renewTokens };

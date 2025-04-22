@@ -1,4 +1,3 @@
-import axios from "axios";
 import { createRemoteJWKSet, generateKeyPair, jwtVerify, exportJWK, SignJWT, GenerateKeyPairResult, KeyLike, calculateJwkThumbprint } from "jose";
 import { requestDynamicClientRegistration } from "./requestDynamicClientRegistration";
 import { SessionTokenInformation } from "./SessionTokenInformation";
@@ -14,9 +13,14 @@ const redirectForLogin = async (idp: string, redirect_uri: string) => {
   // RFC 9207 iss check: remember the identity provider (idp) / issuer (iss)
   sessionStorage.setItem("idp", idp);
   // lookup openid configuration of idp
-  const openid_configuration = (
-    await axios.get(`${idp}/.well-known/openid-configuration`)
-  ).data;
+  const openid_configuration =
+    await fetch(`${idp}/.well-known/openid-configuration`)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        return response.json();
+      });
   // remember token endpoint
   sessionStorage.setItem(
     "token_endpoint",
@@ -31,11 +35,14 @@ const redirectForLogin = async (idp: string, redirect_uri: string) => {
   const registration_endpoint = openid_configuration["registration_endpoint"];
 
   // get client registration
-  const client_registration = (
-    await requestDynamicClientRegistration(registration_endpoint, [
-      redirect_uri,
-    ])
-  ).data;
+  const client_registration =
+    await requestDynamicClientRegistration(registration_endpoint, [redirect_uri])
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        return response.json();
+      });
 
   // remember client_id and client_secret
   const client_id = client_registration["client_id"];
@@ -151,7 +158,7 @@ const onIncomingRedirect = async () => {
   // RFC 9449 DPoP
   const key_pair = await generateKeyPair("ES256");
   // get access token
-  const token_response = (
+  const token_response =
     await requestAccessToken(
       authorization_code,
       pkce_code_verifier,
@@ -161,7 +168,12 @@ const onIncomingRedirect = async () => {
       token_endpoint,
       key_pair
     )
-  ).data;
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        return response.json();
+      });
 
   // verify access_token // ! Solid-OIDC specification says it should be a dpop-bound `id token` but implementations provide a dpop-bound `access token`
   const accessToken = token_response["access_token"];
@@ -247,22 +259,23 @@ const requestAccessToken = async (
     })
     .sign(key_pair.privateKey);
 
-  return axios({
-    url: token_endpoint,
-    method: "post",
-    headers: {
-      dpop,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    data: new URLSearchParams({
-      grant_type: "authorization_code",
-      code: authorization_code,
-      code_verifier: pkce_code_verifier,
-      redirect_uri: redirect_uri,
-      client_id: client_id,
-      client_secret: client_secret,
-    }),
-  });
+  return fetch(
+    token_endpoint,
+    {
+      method: "POST",
+      headers: {
+        dpop,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: authorization_code,
+        code_verifier: pkce_code_verifier,
+        redirect_uri: redirect_uri,
+        client_id: client_id,
+        client_secret: client_secret,
+      }),
+    });
 };
 
 export { redirectForLogin, onIncomingRedirect };

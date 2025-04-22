@@ -1,5 +1,3 @@
-import axios from "axios";
-
 /**
  * When the client does not have a webid profile document, use this.
  *
@@ -21,11 +19,16 @@ const requestDynamicClientRegistration = async (
     subject_type: "public",
   };
   // register
-  return axios({
-    url: registration_endpoint,
-    method: "post",
-    data: client_registration_request_body,
-  });
+  return fetch(
+    registration_endpoint,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(client_registration_request_body),
+    }
+  );
 };
 
 export { requestDynamicClientRegistration };
