@@ -1,3 +1,5 @@
+![NPM Version](https://img.shields.io/npm/v/%40uvdsl%2Fsolid-oidc-client-browser)
+
 # Solid OIDC Client Browser
 
 This library implements a very simple version of the Solid OIDC protocol:
@@ -61,6 +63,8 @@ session.logout();
 ```
 
 Once authenticated, you can use `session.authFetch` to fetch data from the Web using authenticated requests.
+If the session is not yet authenticated, `session.authFetch` behaves like `window.fetch`.
+
 There is a small library that provides [Solid Requests](https://github.com/uvdsl/solid-requests) for get, post, put, delete on resources, and even to create resources with the correct LDP link header, and to create containers with the correct link header - for your convenience.
 
 If you don't want to dabble with parsing the retrieved RDF data manually, check out the [Solid RDF Store](https://github.com/uvdsl/solid-rdf-store).
