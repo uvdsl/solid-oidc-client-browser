@@ -1,5 +1,5 @@
 import axios from "axios";
-import { createRemoteJWKSet, generateKeyPair, jwtVerify, exportJWK, SignJWT, GenerateKeyPairResult, KeyLike } from "jose";
+import { createRemoteJWKSet, generateKeyPair, jwtVerify, exportJWK, SignJWT, GenerateKeyPairResult, KeyLike, calculateJwkThumbprint } from "jose";
 import { requestDynamicClientRegistration } from "./requestDynamicClientRegistration";
 import { SessionTokenInformation } from "./SessionTokenInformation";
 
@@ -163,20 +163,33 @@ const onIncomingRedirect = async () => {
     )
   ).data;
 
-  // verify id_token
-  const idToken = token_response["id_token"];
+  // verify access_token // ! Solid-OIDC specification says it should be a dpop-bound `id token` but implementations provide a dpop-bound `access token`
+  const accessToken = token_response["access_token"];
   const jwks_uri = sessionStorage.getItem("jwks_uri");
   if (jwks_uri === null) {
     throw new Error(
-      "ID Token validation preparation - Could not find in sessionStorage: jwks_uri"
+      "Access Token validation preparation - Could not find in sessionStorage: jwks_uri"
     );
   }
   const jwks = createRemoteJWKSet(new URL(jwks_uri));
-  await jwtVerify(idToken, jwks, {
-    issuer: idp,  // RFC 9207
-    audience: client_id, // RFC 7519
+  const { payload } = await jwtVerify(accessToken, jwks, {
+    issuer: idp + (idp.endsWith("/") ? "" : "/"),  // RFC 9207
+    audience: "solid", // RFC 7519 // ! "solid" as per implementations ...
     // exp, nbf, iat - handled automatically
   });
+  // check dpop thumbprint
+  const dpopThumbprint = await calculateJwkThumbprint(await exportJWK(key_pair.publicKey))
+  if ((payload["cnf"] as any)["jkt"] != dpopThumbprint) {
+    throw new Error(
+      "Access Token validation failed on `jkt`: jkt != DPoP thumbprint - " + (payload["cnf"] as any)["jkt"] + " != " + dpopThumbprint
+    );
+  }
+  // check client_id
+  if (payload["client_id"] != client_id) {
+    throw new Error(
+      "Access Token validation failed on `client_id`: JWT payload != client_id - " + payload["client_id"] + " != " + client_id
+    );
+  }
 
   // clean session storage
   // sessionStorage.removeItem("idp");
