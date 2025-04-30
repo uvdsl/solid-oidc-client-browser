@@ -7,7 +7,8 @@ This library implements a very simple version of the Solid OIDC protocol:
 - [x] AuthorizationCodeGrant
 - [x] with PKCE (RFC 7636)
 - [x] with `iss` check (RFC 9207)
-- [x] with dynamic client registration (TODO support provided `client_id` and client profile documents)
+- [x] with dynamic client registration 
+- [ ] TODO: support provided `client_id` with client profile document
 - [x] RefreshTokenGrant to renew a session
 - [x] Uses `sessionStorage` to temporarily store session information like `idp`, `client_id`, `refresh_token`, and `token_endpoint`. The storage is origin-bound and tab-bound, meaning that you can have multiple distinct sessions on the same origin using different tabs (see also [security considerations](#security-considerations)).
 
