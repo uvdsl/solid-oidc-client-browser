@@ -117,7 +117,7 @@ You can use this library along the lines of these examples:
 </html>
 ```
 
-For an example of a multi-page application, see this [example](https://github.com/uvdsl/solid-oidc-client-browser/issues/4#issuecomment-2841098732).
+For a multi-page application, see this [example](https://github.com/uvdsl/solid-oidc-client-browser/issues/4#issuecomment-2841098732).
 
 #### in a Single Page Application (SPA), e.g. using Vue
 
