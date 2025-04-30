@@ -189,7 +189,7 @@ We use `sessionStorage` to store `client_id`, `refresh token` etc. to allow for 
 `sessionStorage` is origin-bound and tab-bound, meaning that you can have multiple distinct sessions on the same origin using different tabs. 
 
 
-#### Hosting multiple Solid Apps on the same origin (at differnt paths)
+#### Hosting multiple Solid Apps on the same origin (at different paths)
 
 Despite the fact that the current setup allows for multi-page applications on the same origin, we need to carefully review the security implications.
 
@@ -199,9 +199,9 @@ Now, the crux:
 If you consider a multi-page app to actually be comprised of two (or more) Solid Apps (with distinct `client_id`s ), then it is possible for one Solid App to hijack the session of the other Solid App:
 While `sessionStorage` does not persist after the tab is closed and is not available across tabs, it is still possible that when moving between the two Solid Apps on the same origin in the same tab (similar to moving between pages of the multi-page app served in that origin) the existing refresh token from Solid App 1 can be re-used by Solid App 2 to retrieve fresh tokens (just like the multi-page app does). So now Solid App 2 actually has tokens with the `client_id` of Solid App 1.
 
-This is a problem from a security perspective: If a resource on a Solid Pod has been restricted via [ACP](https://solid.github.io/authorization-panel/acp-specification/) to only be accesible for Solid App 1 but not Solid App 2, the resource can still be accessed by Solid App 2 using the just obtained token (outlined above).
+This is a problem from a security perspective: If a resource on a Solid Pod has been restricted via [ACP](https://solid.github.io/authorization-panel/acp-specification/) to only be accessible for Solid App 1 but not Solid App 2, the resource can still be accessed by Solid App 2 using the just obtained token (outlined above).
 
-Therefore, I would like to suggest to adhere to the origin-centered security perspective that aligns with the browsers' security mechansims.
+Therefore, I would like to suggest to adhere to the origin-centered security perspective that aligns with the browsers' security mechanisms.
 
 If you want to serve multiple Solid Apps under the same origin, I'd suggest you consider this composition one mutli-page app with one overreaching `client_id`. This way, it is explicit that the different Solid Apps are really just one compositional app living in the same security context / within the same security boundaries enforced by the browser.
 
