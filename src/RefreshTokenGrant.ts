@@ -10,6 +10,7 @@ import {
 } from "jose";
 import { SessionTokenInformation } from "./SessionTokenInformation";
 
+// cannot be used by public client => unusable code, to be removed
 const renewTokens = async () => {
   const client_id = sessionStorage.getItem("client_id");
   const refresh_token = sessionStorage.getItem("refresh_token");
@@ -127,3 +128,4 @@ const requestFreshTokens = async (
 };
 
 export { renewTokens };
+// cannot be used by public client => unusable code, to be removed

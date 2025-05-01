@@ -61,12 +61,12 @@ const redirectForLogin = async (idp: string, redirect_uri: string) => {
     openid_configuration["authorization_endpoint"] +
     `?response_type=code` +
     `&redirect_uri=${encodeURIComponent(redirect_uri)}` +
-    `&scope=openid offline_access webid` +
+    `&scope=openid webid` +
     `&client_id=${client_id}` +
     `&code_challenge_method=S256` +
     `&code_challenge=${pkce_code_challenge}` +
     `&state=${csrf_token}` +
-    `&prompt=consent`; // this query parameter value MUST be present for CSS v7 to issue a refresh token ( // TODO open issue because prompting is the default behaviour but without this query param no refresh token is provided despite the "remember this client" box being checked)
+    `&prompt=consent`;
 
   window.location.href = redirect_to_idp;
 };
@@ -195,11 +195,8 @@ const onIncomingRedirect = async () => {
   }
 
   // clean session storage
-  // sessionStorage.removeItem("idp");
   sessionStorage.removeItem("csrf_token");
   sessionStorage.removeItem("pkce_code_verifier");
-  // sessionStorage.removeItem("client_id");
-  // sessionStorage.removeItem("token_endpoint");
 
   // remember refresh_token for session
   sessionStorage.setItem("refresh_token", token_response["refresh_token"]);

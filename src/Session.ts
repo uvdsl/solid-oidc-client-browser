@@ -4,7 +4,6 @@ import {
   onIncomingRedirect,
 } from "./AuthorizationCodeGrantFlow";
 import { SessionTokenInformation } from "./SessionTokenInformation";
-import { renewTokens } from "./RefreshTokenGrant";
 
 export class Session {
   private tokenInformation: SessionTokenInformation | undefined;
@@ -27,12 +26,6 @@ export class Session {
 
   handleRedirectFromLogin() {
     return onIncomingRedirect().then(async (sessionInfo) => {
-      if (!sessionInfo) {
-        // try refresh
-        sessionInfo = await renewTokens().catch((_) => {
-          return undefined;
-        });
-      }
       if (!sessionInfo) {
         // still no session
         return;
