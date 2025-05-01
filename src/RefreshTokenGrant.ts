@@ -12,10 +12,9 @@ import { SessionTokenInformation } from "./SessionTokenInformation";
 
 const renewTokens = async () => {
   const client_id = sessionStorage.getItem("client_id");
-  const client_secret = sessionStorage.getItem("client_secret");
   const refresh_token = sessionStorage.getItem("refresh_token");
   const token_endpoint = sessionStorage.getItem("token_endpoint");
-  if (!client_id || !client_secret || !refresh_token || !token_endpoint) {
+  if (!client_id || !refresh_token || !token_endpoint) {
     // we can not restore the old session
     throw new Error("Cannot renew tokens");
   }
@@ -25,7 +24,6 @@ const renewTokens = async () => {
     await requestFreshTokens(
       refresh_token,
       client_id,
-      client_secret,
       token_endpoint,
       key_pair
     )
@@ -71,7 +69,7 @@ const renewTokens = async () => {
   }
 
   // set new refresh token for token rotation
-  sessionStorage.setItem("refresh_token",token_response["refresh_token"]);
+  sessionStorage.setItem("refresh_token", token_response["refresh_token"]);
 
   return {
     ...token_response,
@@ -85,7 +83,6 @@ const renewTokens = async () => {
  * @param pkce_code_verifier
  * @param redirect_uri
  * @param client_id
- * @param client_secret
  * @param token_endpoint
  * @param key_pair
  * @returns
@@ -93,7 +90,6 @@ const renewTokens = async () => {
 const requestFreshTokens = async (
   refresh_token: string,
   client_id: string,
-  client_secret: string,
   token_endpoint: string,
   key_pair: GenerateKeyPairResult<KeyLike>
 ) => {
@@ -119,13 +115,13 @@ const requestFreshTokens = async (
     {
       method: "POST",
       headers: {
-        authorization: `Basic ${btoa(`${client_id}:${client_secret}`)}`,
         dpop,
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: refresh_token,
+        client_id: client_id,
       }),
     });
 };
