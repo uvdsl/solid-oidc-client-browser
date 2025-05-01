@@ -70,6 +70,9 @@ const renewTokens = async () => {
     );
   }
 
+  // set new refresh token for token rotation
+  sessionStorage.setItem("refresh_token",token_response["refresh_token"]);
+
   return {
     ...token_response,
     dpop_key_pair: key_pair,
