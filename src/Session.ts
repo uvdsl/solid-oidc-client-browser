@@ -1,6 +1,7 @@
 import { SignJWT, decodeJwt, exportJWK } from "jose";
 import {
   redirectForLogin,
+  redirectForSilentLogin,
   onIncomingRedirect,
 } from "./AuthorizationCodeGrantFlow";
 import { SessionTokenInformation } from "./SessionTokenInformation";
@@ -10,7 +11,13 @@ export class Session {
   private isActive_ = false;
   private webId_: string | undefined = undefined;
 
-  login = redirectForLogin;
+  constructor(private redirectUri_: string) {
+    // No need to assign, TypeScript does it automatically
+  }
+
+  async login(idp: string) {
+    return redirectForLogin(idp, this.redirectUri_)
+  }
 
   logout() {
     this.tokenInformation = undefined;
@@ -19,23 +26,43 @@ export class Session {
     // clean session storage
     sessionStorage.removeItem("idp");
     sessionStorage.removeItem("client_id");
-    sessionStorage.removeItem("client_secret");
+    sessionStorage.removeItem("authorization_endpoint");
     sessionStorage.removeItem("token_endpoint");
-    sessionStorage.removeItem("refresh_token");
   }
 
-  handleRedirectFromLogin() {
+  /**
+    * Primarily handles the redirect after a login.
+    * If no authenticated session is established by then,
+    * for example, because the page reload was a fresh visit and not the actual login redirect,
+    * silent authentication is attempted once. This is indicated by returning `false` - "no session available yet, let me try logging in". 
+    * This is necessary because setting `window.location.href` does not immediately trigger the redirect but only after completion of the function.
+    * If, after that redirect back, still no authenticated session exists, we accept that we are unauthenticated and indicate the available session status by returning `true`.
+    *
+    * @returns `true` if an authenticated session exists or the application has determined it is unauthenticated;
+    * `false` if a redirect for silent authentication is imminent.
+    */
+  async handleRedirectFromLogin() {
     return onIncomingRedirect().then(async (sessionInfo) => {
-      if (!sessionInfo) {
-        // still no session
-        return;
+      const idp = sessionStorage.getItem('idp');
+      if (!sessionInfo && idp && !sessionStorage.getItem("no_restore")) {
+        // no session but `idp` has been set in sessionStorage, so we assume that the user was logged in before
+        // so we try to "silently" log in (once - no_restore flag, so we do not get into a loop of death)
+        sessionStorage.setItem("no_restore", "_");
+        await redirectForSilentLogin(this.redirectUri_);
+        return false; // communicate to calling programm that we shall be redirected shortly ...
       }
-      // we got a sessionInfo
-      this.tokenInformation = sessionInfo;
-      this.isActive_ = true;
-      this.webId_ = decodeJwt(this.tokenInformation.access_token)[
-        "webid"
-      ] as string;
+      if (sessionInfo) {
+        // we got a sessionInfo
+        this.tokenInformation = sessionInfo;
+        this.isActive_ = true;
+        this.webId_ = decodeJwt(this.tokenInformation.access_token)[
+          "webid"
+        ] as string;
+        // and we can try to restore this session next time
+        sessionStorage.removeItem("no_restore");
+      }
+      // we have a session
+      return true; //  communicate to calling programm that we wont be redirected ...
     });
   }
 

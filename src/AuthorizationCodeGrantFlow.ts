@@ -3,6 +3,8 @@ import { requestDynamicClientRegistration } from "./requestDynamicClientRegistra
 import { SessionTokenInformation } from "./SessionTokenInformation";
 
 /**
+ * Authorization Code Grant (`prompt=consent`)
+ * 
  * Login with the idp, using dynamic client registration.
  * TODO generalise to use a provided client webid
  *
@@ -21,12 +23,15 @@ const redirectForLogin = async (idp: string, redirect_uri: string) => {
         }
         return response.json();
       });
-  // remember token endpoint
+  // remember authorization endpoint - to save a HTTP request on silent authentication (otherwise lookup idp again)
+  const authorization_endpoint = openid_configuration["authorization_endpoint"];
+  sessionStorage.setItem("authorization_endpoint", authorization_endpoint);
+  // remember token endpoint - to save a HTTP request on handling the redirect (otherwise lookup idp again)
   sessionStorage.setItem(
     "token_endpoint",
     openid_configuration["token_endpoint"]
   );
-  // remember jwks_uri for later token verification
+  // remember jwks_uri for later token verification - to save a HTTP request (otherwise lookup idp again)
   sessionStorage.setItem(
     "jwks_uri",
     openid_configuration["jwks_uri"]
@@ -58,7 +63,7 @@ const redirectForLogin = async (idp: string, redirect_uri: string) => {
 
   // redirect to idp
   const redirect_to_idp =
-    openid_configuration["authorization_endpoint"] +
+    authorization_endpoint +
     `?response_type=code` +
     `&redirect_uri=${encodeURIComponent(redirect_uri)}` +
     `&scope=openid webid` +
@@ -70,6 +75,50 @@ const redirectForLogin = async (idp: string, redirect_uri: string) => {
 
   window.location.href = redirect_to_idp;
 };
+
+/**
+ * Silent Authorization Code Grant (`prompt=none`)
+ * 
+ * Requires that the current `client_id` has already been part of an Authorization Code Flow (`prompt=consent`). 
+ */
+const redirectForSilentLogin = async (redirect_uri: string) => {
+
+  const client_id = sessionStorage.getItem("client_id");
+  if (client_id === null) {
+    throw new Error(
+      "Silent Authentication preparation - Could not find in sessionStorage: client_id"
+    );
+  }
+
+  const authorization_endpoint = sessionStorage.getItem("authorization_endpoint");
+  if (authorization_endpoint === null) {
+    throw new Error(
+      "Silent Authentication preparation - Could not find in sessionStorage: authorization_endpoint"
+    );
+  }
+
+  // RFC 7636 PKCE, remember code verifer
+  const { pkce_code_verifier, pkce_code_challenge } = await getPKCEcode();
+  sessionStorage.setItem("pkce_code_verifier", pkce_code_verifier);
+
+  // RFC 6749 OAuth 2.0 - CSRF token
+  const csrf_token = window.crypto.randomUUID();
+  sessionStorage.setItem("csrf_token", csrf_token);
+
+  // redirect to idp
+  const redirect_to_idp =
+    authorization_endpoint +
+    `?response_type=code` +
+    `&redirect_uri=${encodeURIComponent(redirect_uri)}` +
+    `&scope=openid webid` +
+    `&client_id=${client_id}` +
+    `&code_challenge_method=S256` +
+    `&code_challenge=${pkce_code_challenge}` +
+    `&state=${csrf_token}` +
+    `&prompt=none`;
+
+  window.location.href = redirect_to_idp;
+}
 
 /**
  * RFC 7636 PKCE
@@ -198,9 +247,6 @@ const onIncomingRedirect = async () => {
   sessionStorage.removeItem("csrf_token");
   sessionStorage.removeItem("pkce_code_verifier");
 
-  // remember refresh_token for session
-  sessionStorage.setItem("refresh_token", token_response["refresh_token"]);
-
   // return client login information
   return {
     ...token_response,
@@ -262,4 +308,4 @@ const requestAccessToken = async (
     });
 };
 
-export { redirectForLogin, onIncomingRedirect };
+export { redirectForLogin, redirectForSilentLogin, onIncomingRedirect };
