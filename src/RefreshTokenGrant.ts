@@ -52,7 +52,7 @@ const renewTokens = async () => {
   }
   const jwks = createRemoteJWKSet(new URL(jwks_uri));
   const { payload } = await jwtVerify(accessToken, jwks, {
-    issuer: idp + (idp.endsWith("/") ? "" : "/"),  // RFC 9207
+    issuer: idp,  // RFC 9207
     audience: "solid", // RFC 7519 // ! "solid" as per implementations ...
     // exp, nbf, iat - handled automatically
   });

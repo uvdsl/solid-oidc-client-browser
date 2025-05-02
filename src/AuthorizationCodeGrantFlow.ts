@@ -13,8 +13,9 @@ const redirectForLogin = async (idp: string, redirect_uri: string) => {
   // RFC 9207 iss check: remember the identity provider (idp) / issuer (iss)
   sessionStorage.setItem("idp", idp);
   // lookup openid configuration of idp
+  const idp_origin = new URL(idp).origin
   const openid_configuration =
-    await fetch(`${idp}/.well-known/openid-configuration`)
+    await fetch(`${idp_origin}/.well-known/openid-configuration`)
       .then((response) => {
         if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`);
@@ -109,10 +110,7 @@ const onIncomingRedirect = async () => {
   }
   // RFC 9207 issuer check
   const idp = sessionStorage.getItem("idp");
-  if (
-    idp === null ||
-    url.searchParams.get("iss") != idp + (idp.endsWith("/") ? "" : "/")
-  ) {
+  if (idp === null || url.searchParams.get("iss") != idp) {
     throw new Error(
       "RFC 9207 - iss != idp - " + url.searchParams.get("iss") + " != " + idp
     );
@@ -185,7 +183,7 @@ const onIncomingRedirect = async () => {
   }
   const jwks = createRemoteJWKSet(new URL(jwks_uri));
   const { payload } = await jwtVerify(accessToken, jwks, {
-    issuer: idp + (idp.endsWith("/") ? "" : "/"),  // RFC 9207
+    issuer: idp,  // RFC 9207
     audience: "solid", // RFC 7519 // ! "solid" as per implementations ...
     // exp, nbf, iat - handled automatically
   });
