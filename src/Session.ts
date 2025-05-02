@@ -28,7 +28,11 @@ export class Session {
     sessionStorage.removeItem("idp");
     sessionStorage.removeItem("client_id");
     sessionStorage.removeItem("authorization_endpoint");
+    sessionStorage.removeItem("jwks_uri");
     sessionStorage.removeItem("token_endpoint");
+    sessionStorage.removeItem("refresh_token");
+    sessionStorage.removeItem("dpop_public_key");
+    sessionStorage.removeItem("dpop_private_key");
   }
 
   /**
