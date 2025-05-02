@@ -5,6 +5,7 @@ import {
   onIncomingRedirect,
 } from "./AuthorizationCodeGrantFlow";
 import { SessionTokenInformation } from "./SessionTokenInformation";
+import { renewTokens } from "./RefreshTokenGrant";
 
 export class Session {
   private tokenInformation: SessionTokenInformation | undefined;
@@ -34,6 +35,7 @@ export class Session {
     * Primarily handles the redirect after a login.
     * If no authenticated session is established by then,
     * for example, because the page reload was a fresh visit and not the actual login redirect,
+    * refresh token grant is attempted. If this does not work, 
     * silent authentication is attempted once. This is indicated by returning `false` - "no session available yet, let me try logging in". 
     * This is necessary because setting `window.location.href` does not immediately trigger the redirect but only after completion of the function.
     * If, after that redirect back, still no authenticated session exists, we accept that we are unauthenticated and indicate the available session status by returning `true`.
@@ -44,6 +46,12 @@ export class Session {
   async handleRedirectFromLogin() {
     return onIncomingRedirect().then(async (sessionInfo) => {
       const idp = sessionStorage.getItem('idp');
+      if (!sessionInfo && idp) {
+        // try refresh
+        sessionInfo = await renewTokens().catch((_) => {
+          return undefined;
+        });
+      }
       if (!sessionInfo && idp && !sessionStorage.getItem("no_restore")) {
         // no session but `idp` has been set in sessionStorage, so we assume that the user was logged in before
         // so we try to "silently" log in (once - no_restore flag, so we do not get into a loop of death)

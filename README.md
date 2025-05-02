@@ -23,12 +23,12 @@ npm install @uvdsl/solid-oidc-client-browser
 #### via a CDN provider
 For the minified version...
 ```html
-<script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.0.7/dist/esm/index.min.js"></script>
+<script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.0.8/dist/esm/index.min.js"></script>
 ```
 
 And the regular version...
 ```html
-<script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.0.7/dist/esm/index.js"></script>
+<script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.0.8/dist/esm/index.js"></script>
 ```
 Do not forget to adjust the version to the one you want! The latest version is displayed at the top of the README in the `npm` badge.
 
@@ -46,7 +46,7 @@ You can use this library along the lines of these examples:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Solid Login Page</title>
-    <script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.0.7/dist/esm/index.min.js"></script>
+    <script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.0.8/dist/esm/index.min.js"></script>
 </head>
 
 <body>
@@ -67,7 +67,7 @@ You can use this library along the lines of these examples:
 
         document.addEventListener('DOMContentLoaded', async () => {
             // Import the Session class from the library
-            const module = await import('https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.0.7/dist/esm/index.min.js');
+            const module = await import('https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.0.8/dist/esm/index.min.js');
             const Session = module.Session;
 
             // Create a new session

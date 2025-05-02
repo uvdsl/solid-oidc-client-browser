@@ -12,7 +12,7 @@ const requestDynamicClientRegistration = async (
   // prepare dynamic client registration
   const client_registration_request_body = {
     redirect_uris: redirect_uris,
-    grant_types: ["authorization_code"],
+    grant_types: ["authorization_code", "refresh_token"],
     id_token_signed_response_alg: "ES256",
     token_endpoint_auth_method: "none", // best current practice in combination with PKCE code
     application_type: "web",
