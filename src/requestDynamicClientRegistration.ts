@@ -14,7 +14,7 @@ const requestDynamicClientRegistration = async (
     redirect_uris: redirect__uris,
     grant_types: ["authorization_code", "refresh_token"],
     id_token_signed_response_alg: "ES256",
-    token_endpoint_auth_method: "client_secret_basic", // also works with value "none" if you do not provide "client_secret" on token request
+    token_endpoint_auth_method: "none",
     application_type: "web",
     subject_type: "public",
   };

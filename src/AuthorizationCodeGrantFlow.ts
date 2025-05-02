@@ -45,11 +45,9 @@ const redirectForLogin = async (idp: string, redirect_uri: string) => {
         return response.json();
       });
 
-  // remember client_id and client_secret
+  // remember client_id
   const client_id = client_registration["client_id"];
   sessionStorage.setItem("client_id", client_id);
-  const client_secret = client_registration["client_secret"];
-  sessionStorage.setItem("client_secret", client_secret);
 
   // RFC 7636 PKCE, remember code verifer
   const { pkce_code_verifier, pkce_code_challenge } = await getPKCEcode();
@@ -140,12 +138,6 @@ const onIncomingRedirect = async () => {
       "Access Token Request preparation - Could not find in sessionStorage: client_id"
     );
   }
-  const client_secret = sessionStorage.getItem("client_secret");
-  if (client_secret === null) {
-    throw new Error(
-      "Access Token Request preparation - Could not find in sessionStorage: client_secret"
-    );
-  }
   const token_endpoint = sessionStorage.getItem("token_endpoint");
   if (token_endpoint === null) {
     throw new Error(
@@ -154,7 +146,10 @@ const onIncomingRedirect = async () => {
   }
 
   // RFC 9449 DPoP
-  const key_pair = await generateKeyPair("ES256");
+  const key_pair = await generateKeyPair("ES256", {extractable: true});
+  // Store the keys in sessionStorage
+  sessionStorage.setItem('dpop_public_key', JSON.stringify(await exportJWK(key_pair.publicKey)));
+  sessionStorage.setItem('dpop_private_key', JSON.stringify(await exportJWK(key_pair.privateKey)));
   // get access token
   const token_response =
     await requestAccessToken(
@@ -162,7 +157,6 @@ const onIncomingRedirect = async () => {
       pkce_code_verifier,
       url.toString(),
       client_id,
-      client_secret,
       token_endpoint,
       key_pair
     )
@@ -202,12 +196,8 @@ const onIncomingRedirect = async () => {
   }
 
   // clean session storage
-  // sessionStorage.removeItem("idp");
   sessionStorage.removeItem("csrf_token");
   sessionStorage.removeItem("pkce_code_verifier");
-  // sessionStorage.removeItem("client_id");
-  // sessionStorage.removeItem("client_secret");
-  // sessionStorage.removeItem("token_endpoint");
 
   // remember refresh_token for session
   sessionStorage.setItem("refresh_token", token_response["refresh_token"]);
@@ -226,7 +216,6 @@ const onIncomingRedirect = async () => {
  * @param pkce_code_verifier
  * @param redirect_uri
  * @param client_id
- * @param client_secret
  * @param token_endpoint
  * @param key_pair
  * @returns
@@ -236,7 +225,6 @@ const requestAccessToken = async (
   pkce_code_verifier: string,
   redirect_uri: string,
   client_id: string,
-  client_secret: string,
   token_endpoint: string,
   key_pair: GenerateKeyPairResult<KeyLike>
 ) => {
@@ -271,7 +259,6 @@ const requestAccessToken = async (
         code_verifier: pkce_code_verifier,
         redirect_uri: redirect_uri,
         client_id: client_id,
-        client_secret: client_secret,
       }),
     });
 };
