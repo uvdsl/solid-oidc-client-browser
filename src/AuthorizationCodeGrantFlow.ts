@@ -67,7 +67,7 @@ const redirectForLogin = async (idp: string, redirect_uri: string) => {
     authorization_endpoint +
     `?response_type=code` +
     `&redirect_uri=${encodeURIComponent(redirect_uri)}` +
-    `&scope=openid webid` +
+    `&scope=openid offline_access webid` +
     `&client_id=${client_id}` +
     `&code_challenge_method=S256` +
     `&code_challenge=${pkce_code_challenge}` +
@@ -111,7 +111,7 @@ const redirectForSilentLogin = async (redirect_uri: string) => {
     authorization_endpoint +
     `?response_type=code` +
     `&redirect_uri=${encodeURIComponent(redirect_uri)}` +
-    `&scope=openid webid` +
+    `&scope=openid offline_access webid` +
     `&client_id=${client_id}` +
     `&code_challenge_method=S256` +
     `&code_challenge=${pkce_code_challenge}` +
