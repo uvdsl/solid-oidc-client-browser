@@ -16,7 +16,7 @@ const renewTokens = async () => {
   const client_id = await sessionDatabase.getItem("client_id") as string;
   const token_endpoint = await sessionDatabase.getItem("token_endpoint") as string;
   const key_pair = await sessionDatabase.getItem("dpop_keypair") as GenerateKeyPairResult<KeyLike>;
-  const refresh_token = await sessionDatabase.getItem("refresh_token");
+  const refresh_token = await sessionDatabase.getItem("refresh_token") as string;
 
   if (client_id === null || token_endpoint === null || key_pair === null || refresh_token === null) {
     // we can not restore the old session
