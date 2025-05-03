@@ -5,6 +5,7 @@ import {
 } from "./AuthorizationCodeGrantFlow";
 import { SessionTokenInformation } from "./SessionTokenInformation";
 import { renewTokens } from "./RefreshTokenGrant";
+import { SessionDatabase } from "./SessionDatabase";
 
 export class Session {
   private tokenInformation: SessionTokenInformation | undefined;
@@ -13,16 +14,14 @@ export class Session {
 
   login = redirectForLogin;
 
-  logout() {
+  async logout() {
     this.tokenInformation = undefined;
     this.isActive_ = false;
     this.webId_ = undefined;
-    // clean session storage
-    sessionStorage.removeItem("idp");
-    sessionStorage.removeItem("client_id");
-    sessionStorage.removeItem("client_secret");
-    sessionStorage.removeItem("token_endpoint");
-    sessionStorage.removeItem("refresh_token");
+    // clean session database
+    const sessionDatabase = await new SessionDatabase().init()
+    await sessionDatabase.clear();
+    sessionDatabase.close();
   }
 
   handleRedirectFromLogin() {

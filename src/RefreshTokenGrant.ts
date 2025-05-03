@@ -8,40 +8,20 @@ import {
   jwtVerify,
 } from "jose";
 import { SessionTokenInformation } from "./SessionTokenInformation";
+import { SessionDatabase } from "./SessionDatabase";
 
 const renewTokens = async () => {
-  const client_id = sessionStorage.getItem("client_id");
-  const refresh_token = sessionStorage.getItem("refresh_token");
-  const token_endpoint = sessionStorage.getItem("token_endpoint");
-  if (!client_id || !refresh_token || !token_endpoint) {
+  // remember session details
+  const sessionDatabase = await new SessionDatabase().init();
+  const client_id = await sessionDatabase.getItem("client_id") as string;
+  const token_endpoint = await sessionDatabase.getItem("token_endpoint") as string;
+  const key_pair = await sessionDatabase.getItem("dpop_keypair") as GenerateKeyPairResult<KeyLike>;
+  const refresh_token = await sessionDatabase.getItem("refresh_token");
+
+  if (client_id === null || token_endpoint === null || key_pair === null || refresh_token === null) {
     // we can not restore the old session
     throw new Error("Cannot renew tokens");
   }
-  // RFC 9449 DPoP
-  // const key_pair = await generateKeyPair("ES256");
-  const privateKeyJwkString = sessionStorage.getItem("dpop_private_key");
-  const publicKeyJwkString = sessionStorage.getItem("dpop_public_key");
-  if (!privateKeyJwkString || !publicKeyJwkString) {
-    console.log("No DPoP keypair to re-use.")
-    return;
-  }
-  const privateKeyJwk = JSON.parse(privateKeyJwkString);
-  const publicKeyJwk = JSON.parse(publicKeyJwkString);
-  const publicKey = await window.crypto.subtle.importKey(
-    'jwk',
-    publicKeyJwk,
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    true,
-    publicKeyJwk.key_ops || ['verify']
-  );
-  const privateKey = await window.crypto.subtle.importKey(
-    'jwk',
-    privateKeyJwk,
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    true,
-    privateKeyJwk.key_ops || ['sign']
-  );
-  const key_pair = { privateKey, publicKey } as GenerateKeyPairResult<KeyLike>;
 
   const token_response =
     await requestFreshTokens(
@@ -59,16 +39,16 @@ const renewTokens = async () => {
 
   // verify access_token // ! Solid-OIDC specification says it should be a dpop-bound `id token` but implementations provide a dpop-bound `access token`
   const accessToken = token_response["access_token"];
-  const idp = sessionStorage.getItem("idp");
+  const idp = await sessionDatabase.getItem("idp") as string;
   if (idp === null) {
     throw new Error(
-      "Access Token validation preparation - Could not find in sessionStorage: idp"
+      "Access Token validation preparation - Could not find in sessionDatabase: idp"
     );
   }
-  const jwks_uri = sessionStorage.getItem("jwks_uri");
+  const jwks_uri = await sessionDatabase.getItem("jwks_uri") as string;
   if (jwks_uri === null) {
     throw new Error(
-      "Access Token validation preparation - Could not find in sessionStorage: jwks_uri"
+      "Access Token validation preparation - Could not find in sessionDatabase: jwks_uri"
     );
   }
   const jwks = createRemoteJWKSet(new URL(jwks_uri));
@@ -92,7 +72,8 @@ const renewTokens = async () => {
   }
 
   // set new refresh token for token rotation
-  sessionStorage.setItem("refresh_token", token_response["refresh_token"]);
+  await sessionDatabase.setItem("refresh_token", token_response["refresh_token"]);
+  sessionDatabase.close();
 
   return {
     ...token_response,

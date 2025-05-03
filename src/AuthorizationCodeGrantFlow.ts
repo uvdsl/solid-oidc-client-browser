@@ -1,6 +1,7 @@
 import { createRemoteJWKSet, generateKeyPair, jwtVerify, exportJWK, SignJWT, GenerateKeyPairResult, KeyLike, calculateJwkThumbprint } from "jose";
 import { requestDynamicClientRegistration } from "./requestDynamicClientRegistration";
 import { SessionTokenInformation } from "./SessionTokenInformation";
+import { SessionDatabase } from "./SessionDatabase";
 
 /**
  * Login with the idp, using dynamic client registration.
@@ -12,7 +13,7 @@ import { SessionTokenInformation } from "./SessionTokenInformation";
 const redirectForLogin = async (idp: string, redirect_uri: string) => {
   // RFC 6749 - Section 3.1.2 - sanitize redirect_uri
   const redirect_uri_ = new URL(redirect_uri);
-  const redirect_uri_sane =  redirect_uri_.origin + redirect_uri_.pathname + redirect_uri_.search;
+  const redirect_uri_sane = redirect_uri_.origin + redirect_uri_.pathname + redirect_uri_.search;
   // RFC 9207 iss check: remember the identity provider (idp) / issuer (iss)
   sessionStorage.setItem("idp", idp);
   // lookup openid configuration of idp
@@ -149,10 +150,7 @@ const onIncomingRedirect = async () => {
   }
 
   // RFC 9449 DPoP
-  const key_pair = await generateKeyPair("ES256", {extractable: true});
-  // Store the keys in sessionStorage
-  sessionStorage.setItem('dpop_public_key', JSON.stringify(await exportJWK(key_pair.publicKey)));
-  sessionStorage.setItem('dpop_private_key', JSON.stringify(await exportJWK(key_pair.privateKey)));
+  const key_pair = await generateKeyPair("ES256");
   // get access token
   const token_response =
     await requestAccessToken(
@@ -201,9 +199,23 @@ const onIncomingRedirect = async () => {
   // clean session storage
   sessionStorage.removeItem("csrf_token");
   sessionStorage.removeItem("pkce_code_verifier");
+  sessionStorage.removeItem("idp");
+  sessionStorage.removeItem("jwks_uri");
+  sessionStorage.removeItem("token_endpoint");
+  sessionStorage.removeItem("client_id");
 
-  // remember refresh_token for session
-  sessionStorage.setItem("refresh_token", token_response["refresh_token"]);
+  // to remember for session restore
+  const sessionDatabase = await new SessionDatabase().init();
+  await Promise.all([
+    sessionDatabase.setItem("idp", idp),
+    sessionDatabase.setItem("jwks_uri", jwks_uri),
+    sessionDatabase.setItem("token_endpoint", token_endpoint),
+    sessionDatabase.setItem("client_id", client_id),
+    sessionDatabase.setItem("dpop_keypair", key_pair),
+    sessionDatabase.setItem("refresh_token", token_response["refresh_token"])
+  ]);
+  sessionDatabase.close();
+
 
   // return client login information
   return {
