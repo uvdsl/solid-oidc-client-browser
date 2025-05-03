@@ -10,6 +10,9 @@ import { SessionTokenInformation } from "./SessionTokenInformation";
  * @param redirect_uri
  */
 const redirectForLogin = async (idp: string, redirect_uri: string) => {
+  // RFC 6749 - Section 3.1.2 - sanitize redirect_uri
+  const redirect_uri_ = new URL(redirect_uri);
+  const redirect_uri_sane =  redirect_uri_.origin + redirect_uri_.pathname + redirect_uri_.search;
   // RFC 9207 iss check: remember the identity provider (idp) / issuer (iss)
   sessionStorage.setItem("idp", idp);
   // lookup openid configuration of idp
@@ -37,7 +40,7 @@ const redirectForLogin = async (idp: string, redirect_uri: string) => {
 
   // get client registration
   const client_registration =
-    await requestDynamicClientRegistration(registration_endpoint, [redirect_uri])
+    await requestDynamicClientRegistration(registration_endpoint, [redirect_uri_sane])
       .then((response) => {
         if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`);
@@ -63,7 +66,7 @@ const redirectForLogin = async (idp: string, redirect_uri: string) => {
   const redirect_to_idp =
     openid_configuration["authorization_endpoint"] +
     `?response_type=code` +
-    `&redirect_uri=${encodeURIComponent(redirect_uri)}` +
+    `&redirect_uri=${encodeURIComponent(redirect_uri_sane)}` +
     `&scope=openid offline_access webid` +
     `&client_id=${client_id}` +
     `&code_challenge_method=S256` +
