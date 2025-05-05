@@ -5,27 +5,28 @@ import {
   calculateJwkThumbprint,
   createRemoteJWKSet,
   exportJWK,
-  generateKeyPair,
   jwtVerify,
 } from "jose";
 import { SessionTokenInformation } from "./SessionTokenInformation";
+import { SessionDatabase } from "./SessionDatabase";
 
 const renewTokens = async () => {
-  const client_id = sessionStorage.getItem("client_id");
-  const client_secret = sessionStorage.getItem("client_secret");
-  const refresh_token = sessionStorage.getItem("refresh_token");
-  const token_endpoint = sessionStorage.getItem("token_endpoint");
-  if (!client_id || !client_secret || !refresh_token || !token_endpoint) {
+  // remember session details
+  const sessionDatabase = await new SessionDatabase().init();
+  const client_id = await sessionDatabase.getItem("client_id") as string;
+  const token_endpoint = await sessionDatabase.getItem("token_endpoint") as string;
+  const key_pair = await sessionDatabase.getItem("dpop_keypair") as GenerateKeyPairResult<KeyLike>;
+  const refresh_token = await sessionDatabase.getItem("refresh_token") as string;
+
+  if (client_id === null || token_endpoint === null || key_pair === null || refresh_token === null) {
     // we can not restore the old session
     throw new Error("Cannot renew tokens");
   }
-  // RFC 9449 DPoP
-  const key_pair = await generateKeyPair("ES256");
+
   const token_response =
     await requestFreshTokens(
       refresh_token,
       client_id,
-      client_secret,
       token_endpoint,
       key_pair
     )
@@ -38,16 +39,16 @@ const renewTokens = async () => {
 
   // verify access_token // ! Solid-OIDC specification says it should be a dpop-bound `id token` but implementations provide a dpop-bound `access token`
   const accessToken = token_response["access_token"];
-  const idp = sessionStorage.getItem("idp");
+  const idp = await sessionDatabase.getItem("idp") as string;
   if (idp === null) {
     throw new Error(
-      "Access Token validation preparation - Could not find in sessionStorage: idp"
+      "Access Token validation preparation - Could not find in sessionDatabase: idp"
     );
   }
-  const jwks_uri = sessionStorage.getItem("jwks_uri");
+  const jwks_uri = await sessionDatabase.getItem("jwks_uri") as string;
   if (jwks_uri === null) {
     throw new Error(
-      "Access Token validation preparation - Could not find in sessionStorage: jwks_uri"
+      "Access Token validation preparation - Could not find in sessionDatabase: jwks_uri"
     );
   }
   const jwks = createRemoteJWKSet(new URL(jwks_uri));
@@ -71,7 +72,8 @@ const renewTokens = async () => {
   }
 
   // set new refresh token for token rotation
-  sessionStorage.setItem("refresh_token",token_response["refresh_token"]);
+  await sessionDatabase.setItem("refresh_token", token_response["refresh_token"]);
+  sessionDatabase.close();
 
   return {
     ...token_response,
@@ -85,7 +87,6 @@ const renewTokens = async () => {
  * @param pkce_code_verifier
  * @param redirect_uri
  * @param client_id
- * @param client_secret
  * @param token_endpoint
  * @param key_pair
  * @returns
@@ -93,7 +94,6 @@ const renewTokens = async () => {
 const requestFreshTokens = async (
   refresh_token: string,
   client_id: string,
-  client_secret: string,
   token_endpoint: string,
   key_pair: GenerateKeyPairResult<KeyLike>
 ) => {
@@ -119,13 +119,13 @@ const requestFreshTokens = async (
     {
       method: "POST",
       headers: {
-        authorization: `Basic ${btoa(`${client_id}:${client_secret}`)}`,
         dpop,
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({
         grant_type: "refresh_token",
-        refresh_token: refresh_token,
+        refresh_token,
+        client_id
       }),
     });
 };

@@ -1,6 +1,7 @@
 import { createRemoteJWKSet, generateKeyPair, jwtVerify, exportJWK, SignJWT, GenerateKeyPairResult, KeyLike, calculateJwkThumbprint } from "jose";
 import { requestDynamicClientRegistration } from "./requestDynamicClientRegistration";
 import { SessionTokenInformation } from "./SessionTokenInformation";
+import { SessionDatabase } from "./SessionDatabase";
 
 /**
  * Login with the idp, using dynamic client registration.
@@ -12,7 +13,7 @@ import { SessionTokenInformation } from "./SessionTokenInformation";
 const redirectForLogin = async (idp: string, redirect_uri: string) => {
   // RFC 6749 - Section 3.1.2 - sanitize redirect_uri
   const redirect_uri_ = new URL(redirect_uri);
-  const redirect_uri_sane =  redirect_uri_.origin + redirect_uri_.pathname + redirect_uri_.search;
+  const redirect_uri_sane = redirect_uri_.origin + redirect_uri_.pathname + redirect_uri_.search;
   // RFC 9207 iss check: remember the identity provider (idp) / issuer (iss)
   sessionStorage.setItem("idp", idp);
   // lookup openid configuration of idp
@@ -48,11 +49,9 @@ const redirectForLogin = async (idp: string, redirect_uri: string) => {
         return response.json();
       });
 
-  // remember client_id and client_secret
+  // remember client_id
   const client_id = client_registration["client_id"];
   sessionStorage.setItem("client_id", client_id);
-  const client_secret = client_registration["client_secret"];
-  sessionStorage.setItem("client_secret", client_secret);
 
   // RFC 7636 PKCE, remember code verifer
   const { pkce_code_verifier, pkce_code_challenge } = await getPKCEcode();
@@ -143,12 +142,6 @@ const onIncomingRedirect = async () => {
       "Access Token Request preparation - Could not find in sessionStorage: client_id"
     );
   }
-  const client_secret = sessionStorage.getItem("client_secret");
-  if (client_secret === null) {
-    throw new Error(
-      "Access Token Request preparation - Could not find in sessionStorage: client_secret"
-    );
-  }
   const token_endpoint = sessionStorage.getItem("token_endpoint");
   if (token_endpoint === null) {
     throw new Error(
@@ -165,7 +158,6 @@ const onIncomingRedirect = async () => {
       pkce_code_verifier,
       url.toString(),
       client_id,
-      client_secret,
       token_endpoint,
       key_pair
     )
@@ -205,15 +197,25 @@ const onIncomingRedirect = async () => {
   }
 
   // clean session storage
-  // sessionStorage.removeItem("idp");
   sessionStorage.removeItem("csrf_token");
   sessionStorage.removeItem("pkce_code_verifier");
-  // sessionStorage.removeItem("client_id");
-  // sessionStorage.removeItem("client_secret");
-  // sessionStorage.removeItem("token_endpoint");
+  sessionStorage.removeItem("idp");
+  sessionStorage.removeItem("jwks_uri");
+  sessionStorage.removeItem("token_endpoint");
+  sessionStorage.removeItem("client_id");
 
-  // remember refresh_token for session
-  sessionStorage.setItem("refresh_token", token_response["refresh_token"]);
+  // to remember for session restore
+  const sessionDatabase = await new SessionDatabase().init();
+  await Promise.all([
+    sessionDatabase.setItem("idp", idp),
+    sessionDatabase.setItem("jwks_uri", jwks_uri),
+    sessionDatabase.setItem("token_endpoint", token_endpoint),
+    sessionDatabase.setItem("client_id", client_id),
+    sessionDatabase.setItem("dpop_keypair", key_pair),
+    sessionDatabase.setItem("refresh_token", token_response["refresh_token"])
+  ]);
+  sessionDatabase.close();
+
 
   // return client login information
   return {
@@ -229,7 +231,6 @@ const onIncomingRedirect = async () => {
  * @param pkce_code_verifier
  * @param redirect_uri
  * @param client_id
- * @param client_secret
  * @param token_endpoint
  * @param key_pair
  * @returns
@@ -239,7 +240,6 @@ const requestAccessToken = async (
   pkce_code_verifier: string,
   redirect_uri: string,
   client_id: string,
-  client_secret: string,
   token_endpoint: string,
   key_pair: GenerateKeyPairResult<KeyLike>
 ) => {
@@ -274,7 +274,6 @@ const requestAccessToken = async (
         code_verifier: pkce_code_verifier,
         redirect_uri: redirect_uri,
         client_id: client_id,
-        client_secret: client_secret,
       }),
     });
 };
