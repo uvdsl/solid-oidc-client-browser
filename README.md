@@ -79,7 +79,7 @@ You can use this library along the lines of these examples:
             // Set up the login button
             document.getElementById('loginButton').addEventListener('click', () => {
                 // Use a default IDP or let user specify one
-                const idp = "https://solidcommunity.net"; // Default IDP - you can change this
+                const idp = "https://solidcommunity.net/"; // Default IDP - you can change this
                 const redirect_uri = window.location.href;
 
                 // Redirect to login
