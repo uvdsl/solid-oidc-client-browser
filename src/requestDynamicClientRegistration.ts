@@ -1,3 +1,5 @@
+import { ClientDetails } from "./SessionInformation";
+
 /**
  * When the client does not have a webid profile document, use this.
  *
@@ -7,11 +9,11 @@
  */
 const requestDynamicClientRegistration = async (
   registration_endpoint: string,
-  redirect__uris: string[]
+  client_details: ClientDetails
 ) => {
   // prepare dynamic client registration
   const client_registration_request_body = {
-    redirect_uris: redirect__uris,
+    ...client_details,
     grant_types: ["authorization_code", "refresh_token"],
     id_token_signed_response_alg: "ES256",
     token_endpoint_auth_method: "none",

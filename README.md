@@ -7,7 +7,7 @@ This library implements a very simple version of the Solid OIDC protocol:
 - [x] AuthorizationCodeGrant
 - [x] with PKCE (RFC 7636)
 - [x] with `iss` check (RFC 9207)
-- [ ] TODO: with provided `client_id` (dereferencable to client profile document)
+- [x] with provided `client_id` (dereferencable to client profile document)
 - [x] with dynamic client registration 
 - [x] RefreshTokenGrant to renew tokens and to restore a session
 

@@ -1,6 +1,6 @@
 import { createRemoteJWKSet, generateKeyPair, jwtVerify, exportJWK, SignJWT, GenerateKeyPairResult, KeyLike, calculateJwkThumbprint } from "jose";
 import { requestDynamicClientRegistration } from "./requestDynamicClientRegistration";
-import { SessionTokenInformation } from "./SessionTokenInformation";
+import { ClientDetails, IdentityProviderDetails, SessionInformation, TokenDetails } from "./SessionInformation";
 import { SessionDatabase } from "./SessionDatabase";
 
 /**
@@ -10,7 +10,7 @@ import { SessionDatabase } from "./SessionDatabase";
  * @param idp
  * @param redirect_uri
  */
-const redirectForLogin = async (idp: string, redirect_uri: string) => {
+const redirectForLogin = async (idp: string, redirect_uri: string, client_details?: ClientDetails) => {
   // RFC 6749 - Section 3.1.2 - sanitize redirect_uri
   const redirect_uri_ = new URL(redirect_uri);
   const redirect_uri_sane = redirect_uri_.origin + redirect_uri_.pathname + redirect_uri_.search;
@@ -36,22 +36,28 @@ const redirectForLogin = async (idp: string, redirect_uri: string) => {
     "jwks_uri",
     openid_configuration["jwks_uri"]
   );
-  // use registration endpoint
-  const registration_endpoint = openid_configuration["registration_endpoint"];
 
-  // get client registration
-  const client_registration =
-    await requestDynamicClientRegistration(registration_endpoint, [redirect_uri_sane])
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        return response.json();
-      });
-
-  // remember client_id
-  const client_id = client_registration["client_id"];
-  sessionStorage.setItem("client_id", client_id);
+  let client_id = client_details?.client_id;
+  // no client_id => attempt dynamic registration
+  if (!client_id) {
+    // use registration endpoint
+    const registration_endpoint = openid_configuration["registration_endpoint"];
+    // get client registration
+    const client_registration =
+      await requestDynamicClientRegistration(
+        registration_endpoint,
+        client_details ?? { redirect_uris: [redirect_uri_sane] }
+      )
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+          return response.json();
+        });
+    client_id = client_registration["client_id"];
+    // remember client_id
+    sessionStorage.setItem("client_id", client_id!);
+  }
 
   // RFC 7636 PKCE, remember code verifer
   const { pkce_code_verifier, pkce_code_challenge } = await getPKCEcode();
@@ -103,12 +109,13 @@ const getPKCEcode = async () => {
  * URL contains authrization code, issuer (idp) and state (csrf token),
  * get an access token for the authrization code.
  */
-const onIncomingRedirect = async () => {
+const onIncomingRedirect = async (client_details?: ClientDetails) => {
   const url = new URL(window.location.href);
   // authorization code
   const authorization_code = url.searchParams.get("code");
+  // if no code, session remains unauthenticated at this point
   if (authorization_code === null) {
-    return undefined;
+    return { clientDetails: client_details } as SessionInformation;;
   }
   // RFC 9207 issuer check
   const idp = sessionStorage.getItem("idp");
@@ -136,10 +143,10 @@ const onIncomingRedirect = async () => {
       "Access Token Request preparation - Could not find in sessionStorage: pkce_code_verifier"
     );
   }
-  const client_id = sessionStorage.getItem("client_id");
-  if (client_id === null) {
+  const client_id = client_details?.client_id || sessionStorage.getItem("client_id");
+  if (!client_id) {
     throw new Error(
-      "Access Token Request preparation - Could not find in sessionStorage: client_id"
+      "Access Token Request preparation - Could not find in sessionStorage: client_id (dynamic registration)"
     );
   }
   const token_endpoint = sessionStorage.getItem("token_endpoint");
@@ -196,13 +203,11 @@ const onIncomingRedirect = async () => {
     );
   }
 
-  // clean session storage
-  sessionStorage.removeItem("csrf_token");
-  sessionStorage.removeItem("pkce_code_verifier");
-  sessionStorage.removeItem("idp");
-  sessionStorage.removeItem("jwks_uri");
-  sessionStorage.removeItem("token_endpoint");
-  sessionStorage.removeItem("client_id");
+  // summarise session info
+  const token_details = { ...token_response, dpop_key_pair: key_pair } as TokenDetails;
+  const idp_details = { idp, jwks_uri, token_endpoint } as IdentityProviderDetails
+  if (!client_details) client_details = { redirect_uris: [window.location.href] };
+  client_details.client_id = client_id;
 
   // to remember for session restore
   const sessionDatabase = await new SessionDatabase().init();
@@ -216,12 +221,20 @@ const onIncomingRedirect = async () => {
   ]);
   sessionDatabase.close();
 
+  // clean session storage
+  sessionStorage.removeItem("csrf_token");
+  sessionStorage.removeItem("pkce_code_verifier");
+  sessionStorage.removeItem("idp");
+  sessionStorage.removeItem("jwks_uri");
+  sessionStorage.removeItem("token_endpoint");
+  sessionStorage.removeItem("client_id");
 
-  // return client login information
+  // return session information
   return {
-    ...token_response,
-    dpop_key_pair: key_pair,
-  } as SessionTokenInformation;
+    clientDetails: client_details,
+    idpDetails: idp_details,
+    tokenDetails: token_details
+  } as SessionInformation;
 };
 
 

@@ -7,8 +7,8 @@ import {
   exportJWK,
   jwtVerify,
 } from "jose";
-import { SessionTokenInformation } from "./SessionTokenInformation";
 import { SessionDatabase } from "./SessionDatabase";
+import { TokenDetails } from "./SessionInformation";
 
 const renewTokens = async () => {
   // remember session details
@@ -78,7 +78,7 @@ const renewTokens = async () => {
   return {
     ...token_response,
     dpop_key_pair: key_pair,
-  } as SessionTokenInformation;
+  } as TokenDetails;
 };
 
 /**
