@@ -4,8 +4,7 @@ import { ClientDetails, IdentityProviderDetails, SessionInformation, TokenDetail
 import { SessionDatabase } from "./SessionDatabase";
 
 /**
- * Login with the idp, using dynamic client registration.
- * TODO generalise to use a provided client webid
+ * Login with the idp, using a provided `client_id` or dynamic client registration if none provided.
  *
  * @param idp
  * @param redirect_uri
