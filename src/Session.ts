@@ -7,22 +7,24 @@ import { ClientDetails, SessionInformation } from "./SessionInformation";
 import { renewTokens } from "./RefreshTokenGrant";
 import { SessionDatabase } from "./SessionDatabase";
 
+export interface SessionOptions {
+  onSessionExpirationWarning: () => void;
+}
 export class Session {
 
   private sessionInformation: SessionInformation;
   private isActive_: boolean = false;
   private webId_?: string | undefined = undefined;
+  private tokenRefreshTimeout?: any;
+  private sessionDeactivateTimeout?: any;
+  private onSessionExpirationWarning?: () => void;
 
   /**
-   * Create a new session. You must call `init(clientDetails: ClientDetails)` to initialize it.
-   *
-   * Example:
-   * ```ts
-   * const session = await new Session().init(clientDetails);
-   * ```
+   * Create a new session.
    */
-  constructor(clientDetails?: ClientDetails) {
+  constructor(clientDetails?: ClientDetails, sessionOptions?: SessionOptions) {
     this.sessionInformation = { clientDetails } as SessionInformation;
+    this.onSessionExpirationWarning = sessionOptions?.onSessionExpirationWarning;
   }
 
   /**
@@ -40,6 +42,13 @@ export class Session {
    * Client details are preserved. 
    */
   async logout() {
+    // clear timeouts
+    if (this.sessionDeactivateTimeout)
+      clearTimeout(this.sessionDeactivateTimeout);
+    this.sessionDeactivateTimeout = undefined;
+    if (this.tokenRefreshTimeout)
+      clearTimeout(this.tokenRefreshTimeout);
+    this.tokenRefreshTimeout = undefined;
     // clean session data
     this.sessionInformation.idpDetails = undefined;
     this.sessionInformation.tokenDetails = undefined;
@@ -87,6 +96,11 @@ export class Session {
       "webid"
     ] as string;
 
+    // deactivating session when token expire
+    this.setSessionDeactivateTimeout();
+
+    // refreshing tokens
+    this.setTokenRefreshTimeout();
 
   }
 
@@ -166,5 +180,35 @@ export class Session {
 
   get webId() {
     return this.webId_;
+  }
+
+  private setSessionDeactivateTimeout() {
+    const deactivate_buffer_seconds = 5;
+    const timeUntilDeactivate = (this.sessionInformation.tokenDetails!.expires_in - deactivate_buffer_seconds) * 1000;
+    if (this.sessionDeactivateTimeout)
+      clearTimeout(this.sessionDeactivateTimeout);
+    this.sessionDeactivateTimeout = setTimeout(() => this.logout(), timeUntilDeactivate)
+  }
+
+  private setTokenRefreshTimeout() {
+    const refresh_buffer_seconds = 95;
+    const timeUntilRefresh = (this.sessionInformation.tokenDetails!.expires_in - refresh_buffer_seconds) * 1000;
+    if (this.tokenRefreshTimeout)
+      clearTimeout(this.tokenRefreshTimeout);
+    this.tokenRefreshTimeout = setTimeout(async () => {
+      const newTokens = await renewTokens()
+        .catch((error) => {
+          // anything missing or wrong => could not renew tokens.
+          if (this.onSessionExpirationWarning)
+            this.onSessionExpirationWarning();
+          return undefined;
+        })
+      if (!newTokens) {
+        return;
+      }
+      this.sessionInformation.tokenDetails = newTokens;
+      this.setSessionDeactivateTimeout();
+      this.setTokenRefreshTimeout();
+    }, timeUntilRefresh);
   }
 }

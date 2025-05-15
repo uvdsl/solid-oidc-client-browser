@@ -32,7 +32,7 @@ export interface TokenDetails {
   id_token?: string;
   refresh_token?: string;
   scope?: string;
-  expires: number;
+  expires_in: number;
   token_type: string;
   dpop_key_pair: GenerateKeyPairResult<KeyLike>;
 }
