@@ -124,7 +124,8 @@ You can use this library along the lines of these examples:
 </html>
 ```
 
-For a multi-page application, see this [example](https://github.com/uvdsl/solid-oidc-client-browser/issues/4#issuecomment-2841098732). Note that starting from `v0.1.0` you manually store sessions using `session.restore()`. It used to be called within `handleRedirectFromLogin` but we separated concerns.
+For a multi-page application, see this [example](https://github.com/uvdsl/solid-oidc-client-browser/issues/4#issuecomment-2841098732). Note that starting from `v0.1.0` you manually store sessions using `session.restore()`. 
+It used to be called within `handleRedirectFromLogin` but we separated concerns.
 
 #### in a Single Page Application (SPA), e.g. using Vue
 
