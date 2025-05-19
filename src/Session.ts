@@ -14,7 +14,8 @@ export class Session {
 
   private sessionInformation: SessionInformation;
   private isActive_: boolean = false;
-  private webId_?: string | undefined = undefined;
+  private webId_?: string = undefined;
+  private currentAth_?: string = undefined;
   private tokenRefreshTimeout?: any;
   private sessionDeactivateTimeout?: any;
   private onSessionExpirationWarning?: () => void;
@@ -80,7 +81,7 @@ export class Session {
     }
     // we got a session
     this.sessionInformation = newSessionInfo;
-    this.setSessionDetails();
+    await this.setSessionDetails();
   }
 
   /**
@@ -94,7 +95,7 @@ export class Session {
         // got new tokens
         this.sessionInformation.tokenDetails = tokenDetails;
         // set session information
-        this.setSessionDetails();
+        return this.setSessionDetails();
       })
       // anything missing or wrong => abort, could not restore session.
       .catch(_ => { }); // fail silently
@@ -109,9 +110,10 @@ export class Session {
    * @throws Error if the session has not been initialized - if no token details are available.
    */
   private async createSignedDPoPToken(payload: any) {
-    if (this.sessionInformation.tokenDetails == undefined) {
+    if (!this.sessionInformation.tokenDetails || !this.currentAth_) {
       throw new Error("Session not established.");
     }
+    payload.ath = this.currentAth_;
     const jwk_public_key = await exportJWK(
       this.sessionInformation.tokenDetails.dpop_key_pair.publicKey
     );
@@ -179,7 +181,20 @@ export class Session {
     return this.webId_;
   }
 
-  private setSessionDetails() {
+  //
+  // Helper Methods
+  //
+
+  /**
+   * Set the session to active if there is an access token.
+   */
+  private async setSessionDetails() {
+    // check for access token 
+    if (!this.sessionInformation.tokenDetails?.access_token) {
+      this.logout();
+    }
+    // generate ath
+    this.currentAth_ = await this.computeAth(this.sessionInformation.tokenDetails!.access_token)
     // check for active session
     this.webId_ = decodeJwt(this.sessionInformation.tokenDetails!.access_token)[
       "webid"
@@ -219,5 +234,25 @@ export class Session {
       this.setSessionDeactivateTimeout();
       this.setTokenRefreshTimeout();
     }, timeUntilRefresh);
+  }
+
+  /**
+   * RFC 9449 - Hash of the access token
+   */
+  private async computeAth(accessToken: string): Promise<string> {
+    // Convert the ASCII string of the token to a Uint8Array
+    const encoder = new TextEncoder();
+    const data = encoder.encode(accessToken); // ASCII by default
+    // Compute SHA-256 hash
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    // Convert ArrayBuffer to base64url string
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const base64 = btoa(String.fromCharCode(...hashArray));
+    // Convert base64 to base64url
+    const base64url = base64
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    return base64url;
   }
 }
