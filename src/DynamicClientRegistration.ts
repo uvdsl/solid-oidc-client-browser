@@ -1,4 +1,4 @@
-import { ClientDetails } from "./SessionInformation";
+import { DynamicRegistrationClientDetails } from "./SessionInformation";
 
 /**
  * When the client does not have a webid profile document, use this.
@@ -9,7 +9,7 @@ import { ClientDetails } from "./SessionInformation";
  */
 const requestDynamicClientRegistration = async (
   registration_endpoint: string,
-  client_details: ClientDetails
+  client_details: DynamicRegistrationClientDetails
 ) => {
   // prepare dynamic client registration
   const client_registration_request_body = {

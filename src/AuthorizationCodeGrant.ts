@@ -1,6 +1,6 @@
 import { createRemoteJWKSet, generateKeyPair, jwtVerify, exportJWK, SignJWT, GenerateKeyPairResult, KeyLike, calculateJwkThumbprint } from "jose";
-import { requestDynamicClientRegistration } from "./requestDynamicClientRegistration";
-import { ClientDetails, IdentityProviderDetails, SessionInformation, TokenDetails } from "./SessionInformation";
+import { requestDynamicClientRegistration } from "./DynamicClientRegistration";
+import { ClientDetails, DynamicRegistrationClientDetails, IdentityProviderDetails, SessionInformation, TokenDetails } from "./SessionInformation";
 import { SessionDatabase } from "./SessionDatabase";
 
 /**
@@ -45,7 +45,7 @@ const redirectForLogin = async (idp: string, redirect_uri: string, client_detail
     const client_registration =
       await requestDynamicClientRegistration(
         registration_endpoint,
-        client_details ?? { redirect_uris: [redirect_uri_sane] }
+        client_details as DynamicRegistrationClientDetails ?? { redirect_uris: [redirect_uri_sane] }
       )
         .then((response) => {
           if (!response.ok) {

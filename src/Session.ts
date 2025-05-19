@@ -2,8 +2,8 @@ import { SignJWT, decodeJwt, exportJWK } from "jose";
 import {
   redirectForLogin,
   onIncomingRedirect,
-} from "./AuthorizationCodeGrantFlow";
-import { ClientDetails, SessionInformation } from "./SessionInformation";
+} from "./AuthorizationCodeGrant";
+import { DynamicRegistrationClientDetails, DereferencableIdClientDetails, SessionInformation } from "./SessionInformation";
 import { renewTokens } from "./RefreshTokenGrant";
 import { SessionDatabase } from "./SessionDatabase";
 
@@ -22,7 +22,7 @@ export class Session {
   /**
    * Create a new session.
    */
-  constructor(clientDetails?: ClientDetails, sessionOptions?: SessionOptions) {
+  constructor(clientDetails?: DereferencableIdClientDetails | DynamicRegistrationClientDetails, sessionOptions?: SessionOptions) {
     this.sessionInformation = { clientDetails } as SessionInformation;
     this.onSessionExpirationWarning = sessionOptions?.onSessionExpirationWarning;
   }
