@@ -20,7 +20,7 @@ const renewTokens = async () => {
 
   if (client_id === null || token_endpoint === null || key_pair === null || refresh_token === null) {
     // we can not restore the old session
-    throw new Error("Cannot renew tokens");
+    throw new Error("Could not refresh tokens: details missing from database.");
   }
 
   const token_response =

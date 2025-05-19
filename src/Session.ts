@@ -57,52 +57,49 @@ export class Session {
     // only preserve client_id if URI
     if (this.sessionInformation.clientDetails?.client_id)
       try {
-        new URL(this.sessionInformation.clientDetails.client_id)
+        new URL(this.sessionInformation.clientDetails.client_id);
       } catch (_) {
-        this.sessionInformation.clientDetails.client_id = undefined
+        this.sessionInformation.clientDetails.client_id = undefined;
       }
     // clean session database
-    const sessionDatabase = await new SessionDatabase().init()
+    const sessionDatabase = await new SessionDatabase().init();
     await sessionDatabase.clear();
     sessionDatabase.close();
   }
 
   /**
-   * Handles the redirect from the Identity Provider after a login attempt.
-   * It attempts to retrieve tokens using the authorization code, or restores
-   * a session using a refresh token if available. 
+   * Handles the redirect from the identity provider after a login attempt.
+   * It attempts to retrieve tokens using the authorization code.
    */
   async handleRedirectFromLogin() {
-    // Case 1 - Redirect after Authorization Code Grant // memory via sessionStorage
-    const newSessionInfo = await onIncomingRedirect(this.sessionInformation.clientDetails)
-    // Case 2 - Restore session using Refresh Token Grant // memory via IndexedDB
-    if (!newSessionInfo.tokenDetails) {
-      // renew tokens in RefreshTokenGrant
-      newSessionInfo.tokenDetails = await renewTokens()
-        .catch((error) => {
-          // anything missing or wrong => abort, could not restore session.
-          this.logout();
-          return undefined;
-        });
-    }
-    // Case 3 - still no session - we remain unauthenticated
+    // Redirect after Authorization Code Grant // memory via sessionStorage
+    const newSessionInfo = await onIncomingRedirect(this.sessionInformation.clientDetails);
+    // no session - we remain unauthenticated
     if (!newSessionInfo.tokenDetails) {
       return;
     }
-    // Case 1 & 2 => we got a session
+    // we got a session
     this.sessionInformation = newSessionInfo;
-    this.isActive_ = true;
-    this.webId_ = decodeJwt(this.sessionInformation.tokenDetails!.access_token)[
-      "webid"
-    ] as string;
-
-    // deactivating session when token expire
-    this.setSessionDeactivateTimeout();
-
-    // refreshing tokens
-    this.setTokenRefreshTimeout();
-
+    this.setSessionDetails();
   }
+
+  /**
+   * Handles session restoration using the refresh token grant.
+   * Silently fails if session could not be restored (maybe there was no session in the first place).
+   */
+  async restore() {
+    // Restore session using Refresh Token Grant // memory via IndexedDB
+    await renewTokens()
+      .then(tokenDetails => {
+        // got new tokens
+        this.sessionInformation.tokenDetails = tokenDetails;
+        // set session information
+        this.setSessionDetails();
+      })
+      // anything missing or wrong => abort, could not restore session.
+      .catch(_ => { }); // fail silently
+  }
+
 
   /**
    * Creates a signed DPoP (Demonstration of Proof-of-Possession) token.
@@ -180,6 +177,18 @@ export class Session {
 
   get webId() {
     return this.webId_;
+  }
+
+  private setSessionDetails() {
+    // check for active session
+    this.webId_ = decodeJwt(this.sessionInformation.tokenDetails!.access_token)[
+      "webid"
+    ] as string;
+    this.isActive_ = this.webId !== undefined
+    // deactivating session when token expire
+    this.setSessionDeactivateTimeout();
+    // refreshing tokens
+    this.setTokenRefreshTimeout();
   }
 
   private setSessionDeactivateTimeout() {
