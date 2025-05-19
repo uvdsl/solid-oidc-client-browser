@@ -95,9 +95,12 @@ You can use this library along the lines of these examples:
                     "You're not logged in.";
             });
 
-            // Handle redirect after login
+            
             try {
+                // either: handle redirect after login
                 await session.handleRedirectFromLogin();
+                // or: try to restore the session
+                await session.restore();
 
                 // Update the UI
                 if (session.webId) {
@@ -134,20 +137,12 @@ import { Session } from "@uvdsl/solid-oidc-client-browser";
 
 interface IuseSolidSession {
   session: Session;
-  restoreSession: () => Promise<void>;
 }
 
 const session = reactive(new Session());
 
-async function restoreSession() {
-  await session.handleRedirectFromLogin();
-}
-
 export const useSolidSession = () => {
-  return {
-    session,
-    restoreSession,
-  } as IuseSolidSession;
+  return { session } as IuseSolidSession;
 };
 ```
 
@@ -163,7 +158,11 @@ session.login(idp, redirect_uri);
 
 // in code that is being executed
 // to handle the redirect after login
-restoreSession().then(() => console.log("Logged in:", session.webId));
+session.handleRedirectFromLogin();
+// if no redirect, restore the session
+session.restore();
+// let's have a look if we have a session
+watch(() => session.isActive, () => console.log("Logged in:", session.webId), { immediate: true });
 
 // call on a button click
 session.logout();
