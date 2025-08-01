@@ -53,7 +53,7 @@ const redirectForLogin = async (idp: string, redirect_uri: string, client_detail
           }
           return response.json();
         });
-    client_id = client_registration["client_id"];
+    client_id = client_registration["client_id"] as string;
     // remember client_id
     sessionStorage.setItem("client_id", client_id!);
   }
@@ -72,7 +72,7 @@ const redirectForLogin = async (idp: string, redirect_uri: string, client_detail
     `?response_type=code` +
     `&redirect_uri=${encodeURIComponent(redirect_uri_sane)}` +
     `&scope=openid offline_access webid` +
-    `&client_id=${client_id}` +
+    `&client_id=${encodeURIComponent(client_id)}` +
     `&code_challenge_method=S256` +
     `&code_challenge=${pkce_code_challenge}` +
     `&state=${csrf_token}` +
