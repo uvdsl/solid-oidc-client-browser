@@ -13,10 +13,8 @@ const redirectForLogin = async (idp: string, redirect_uri: string, client_detail
   // RFC 6749 - Section 3.1.2 - sanitize redirect_uri
   const redirect_uri_ = new URL(redirect_uri);
   const redirect_uri_sane = redirect_uri_.origin + redirect_uri_.pathname + redirect_uri_.search;
-  // RFC 9207 iss check: remember the identity provider (idp) / issuer (iss)
-  sessionStorage.setItem("idp", idp);
   // lookup openid configuration of idp
-  const idp_origin = new URL(idp).origin
+  const idp_origin = new URL(idp).origin;
   const openid_configuration =
     await fetch(`${idp_origin}/.well-known/openid-configuration`)
       .then((response) => {
@@ -25,6 +23,15 @@ const redirectForLogin = async (idp: string, redirect_uri: string, client_detail
         }
         return response.json();
       });
+  // RFC 9207 iss check: remember the identity provider (idp) / issuer (iss) - relaxing for trailing slash
+  const issuer = openid_configuration["issuer"];
+  const trim_trailing_slash = (url: string) => (url.endsWith('/') ? url.slice(0, -1) : url);
+  if (trim_trailing_slash(idp) !== trim_trailing_slash(issuer)) { // expected idp matches received issuer mod trailing slash?
+    throw new Error(
+      "RFC 9207 - iss != idp - " + issuer + " != " + idp
+    );
+  }
+  sessionStorage.setItem("idp", issuer);
   // remember token endpoint
   sessionStorage.setItem(
     "token_endpoint",
