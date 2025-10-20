@@ -1,6 +1,6 @@
 {
     "name": "@uvdsl/solid-oidc-client-browser",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "homepage": "https://github.com/uvdsl/",
     "author": "uvdsl - Christoph Braun",
     "license": "MIT",
