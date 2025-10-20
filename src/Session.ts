@@ -231,8 +231,7 @@ export class Session {
         return;
       }
       this.sessionInformation.tokenDetails = newTokens;
-      this.setSessionDeactivateTimeout();
-      this.setTokenRefreshTimeout();
+      this.setSessionDetails();
     }, timeUntilRefresh);
   }
 
