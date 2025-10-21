@@ -7,12 +7,12 @@ import {
   exportJWK,
   jwtVerify,
 } from "jose";
-import { SessionDatabase } from "./SessionDatabase";
 import { TokenDetails } from "./SessionInformation";
+import { ISessionDatabase } from "./SessionDatabase";
 
-const renewTokens = async () => {
+const renewTokens = async (sessionDatabase: ISessionDatabase) => {
   // remember session details
-  const sessionDatabase = await new SessionDatabase().init();
+  await sessionDatabase.init();
   const client_id = await sessionDatabase.getItem("client_id") as string;
   const token_endpoint = await sessionDatabase.getItem("token_endpoint") as string;
   const key_pair = await sessionDatabase.getItem("dpop_keypair") as GenerateKeyPairResult<KeyLike>;

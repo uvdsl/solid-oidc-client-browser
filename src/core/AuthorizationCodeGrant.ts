@@ -1,7 +1,6 @@
 import { createRemoteJWKSet, generateKeyPair, jwtVerify, exportJWK, SignJWT, GenerateKeyPairResult, KeyLike, calculateJwkThumbprint } from "jose";
 import { requestDynamicClientRegistration } from "./DynamicClientRegistration";
 import { ClientDetails, DynamicRegistrationClientDetails, IdentityProviderDetails, SessionInformation, TokenDetails } from "./SessionInformation";
-import { SessionDatabase } from "./SessionDatabase";
 
 /**
  * Login with the idp, using a provided `client_id` or dynamic client registration if none provided.
@@ -215,18 +214,6 @@ const onIncomingRedirect = async (client_details?: ClientDetails) => {
   if (!client_details) client_details = { redirect_uris: [window.location.href] };
   client_details.client_id = client_id;
 
-  // to remember for session restore
-  const sessionDatabase = await new SessionDatabase().init();
-  await Promise.all([
-    sessionDatabase.setItem("idp", idp),
-    sessionDatabase.setItem("jwks_uri", jwks_uri),
-    sessionDatabase.setItem("token_endpoint", token_endpoint),
-    sessionDatabase.setItem("client_id", client_id),
-    sessionDatabase.setItem("dpop_keypair", key_pair),
-    sessionDatabase.setItem("refresh_token", token_response["refresh_token"])
-  ]);
-  sessionDatabase.close();
-
   // clean session storage
   sessionStorage.removeItem("csrf_token");
   sessionStorage.removeItem("pkce_code_verifier");
@@ -240,7 +227,7 @@ const onIncomingRedirect = async (client_details?: ClientDetails) => {
     clientDetails: client_details,
     idpDetails: idp_details,
     tokenDetails: token_details
-  } as SessionInformation;
+  } as SessionInformation
 };
 
 

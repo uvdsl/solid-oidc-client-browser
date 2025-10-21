@@ -1,7 +1,8 @@
+import { ISessionDatabase } from "../core/SessionDatabase";
 /**
- * A simple IndexedDB wrapper
+ * A simple IndexedDB wrapper.
  */
-export class SessionDatabase {
+export class SessionIDB implements ISessionDatabase {
     private readonly dbName: string;
     private readonly storeName: string;
     private readonly dbVersion: number;
@@ -23,7 +24,7 @@ export class SessionDatabase {
      * Initializes the IndexedDB database
      * @returns Promise that resolves when the database is ready
      */
-    public async init(): Promise<SessionDatabase> {
+    public async init(): Promise<SessionIDB> {
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(this.dbName, this.dbVersion);
 
