@@ -1,8 +1,8 @@
-import { ISessionDatabase } from "../core/SessionDatabase";
+import { SessionDatabase } from "../core/SessionDatabase";
 /**
  * A simple IndexedDB wrapper.
  */
-export class SessionIDB implements ISessionDatabase {
+export class SessionIDB implements SessionDatabase {
     private readonly dbName: string;
     private readonly storeName: string;
     private readonly dbVersion: number;

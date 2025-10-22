@@ -19,16 +19,36 @@
         "test": "jest --coverage",
         "postbuild": "node ./scripts/prepare-package-json.js"
     },
+    "browser": "./dist/esm/web/index.js",
+    "module": "./dist/esm/web/index.js",
     "exports": {
         ".": {
-            "import": "./dist/esm/index.js",
-            "minified": "./dist/esm/index.min.js",
-            "types": "./dist/types/index.d.ts",
-            "default": "./dist/esm/index.js"
+            "import": "./dist/esm/web/index.js",
+            "types": "./dist/types/web/index.d.ts",
+            "minified": "./dist/esm/web/index.min.js",
+            "default": "./dist/esm/web/index.js"
+        },
+        "./web": {
+            "import": "./dist/esm/web/index.js",
+            "types": "./dist/types/web/index.d.ts",
+            "minified": "./dist/esm/web/index.min.js",
+            "default": "./dist/esm/web/index.js"
+        },
+        "./core": {
+            "import": "./dist/esm/core/index.js",
+            "types": "./dist/types/core/index.d.ts",
+            "minified": "./dist/esm/core/index.min.js",
+            "default": "./dist/esm/core/index.js"
         }
     },
-    "browser": "./dist/esm/index.js",
-    "types": "./dist/types/index.d.ts",
+    "types": "./dist/types/web/index.d.ts",
+    "typesVersions": {
+        "*": {
+            "core": [
+                "./dist/types/core/index.d.ts"
+            ]
+        }
+    },
     "files": [
         "dist"
     ],

@@ -1,20 +1,22 @@
-import { ISession, ISessionOptions, SessionCore } from '../core/Session';
+import { DereferencableIdClientDetails, DynamicRegistrationClientDetails } from '../core';
+import { Session, SessionOptions, SessionCore } from '../core/Session';
 import { SessionIDB } from './SessionDatabase';
 
-export interface IWebWorkerSessionOptions extends ISessionOptions {
+// Any provided database via SessionOptions will be ignored.
+// Database will be an IndexedDB.
+export interface WebWorkerSessionOptions extends SessionOptions {
     onSessionExpirationWarning?: () => void;
 }
 
 /**
  * This Session provides background token refreshing using a Web Worker.
- * Any provided database via SessionOptions is overwritten.
  */
-export class WebWorkerSession implements ISession {
+export class WebWorkerSession implements Session {
     private sessionCore: SessionCore;
     private worker: SharedWorker;
     private onSessionExpirationWarning?: () => void;
 
-    constructor(clientDetails?: any, sessionOptions?: IWebWorkerSessionOptions) {
+    constructor(clientDetails?: DereferencableIdClientDetails | DynamicRegistrationClientDetails, sessionOptions?: WebWorkerSessionOptions) {
         // create session core and provide it with persistent database
         const database = new SessionIDB();
         const options = { ...sessionOptions, database };

@@ -2,13 +2,13 @@
  * A simple storage interface to a generic key-value database.
  * For an implementation, please see eg `../web/SessionDatabase`.
  */
-export interface ISessionDatabase {
+export interface SessionDatabase {
 
     /**
      * Initializes the database
      * @returns Promise that resolves when the database is ready
      */
-    init(): Promise<ISessionDatabase> ;
+    init(): Promise<SessionDatabase> ;
 
     /**
      * Stores any value in the database with the given ID as key

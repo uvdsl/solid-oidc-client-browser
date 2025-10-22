@@ -1,15 +1,19 @@
 import { SignJWT, decodeJwt, exportJWK } from "jose";
 import { redirectForLogin, onIncomingRedirect } from "./AuthorizationCodeGrant";
 import { renewTokens } from "./RefreshTokenGrant";
-import { ISessionDatabase } from "./SessionDatabase";
+import { SessionDatabase } from "./SessionDatabase";
 import { DynamicRegistrationClientDetails, DereferencableIdClientDetails, SessionInformation, TokenDetails } from "./SessionInformation";
 
 
-export interface ISessionOptions {
-  database?: ISessionDatabase
+export interface SessionOptions {
+  database?: SessionDatabase
 }
 
-export interface ISession {
+/**
+ * The Session interface.
+ * 
+ */
+export interface Session {
 
   /**
    * Redirect the user for login to their IDP.
@@ -55,22 +59,22 @@ export interface ISession {
 //
 
 /**
- * The CoreSession class manages session state and core logic but does not handle the refresh lifecycle.
- * It provides the {@link ISessionOptions} to provide a database to be able to restore a session.
+ * The SessionCore class manages session state and core logic but does not handle the refresh lifecycle.
+ * It receives {@link SessionOptions} with a database to be able to restore a session.
  * That database can be re-used by (your!) surrounding implementation to handle the refresh lifecycle.
- * If no database was provided, refresh information cannot be persisted, and thus token refresh is not possible in this case.
+ * If no database was provided, refresh information cannot be stored, and thus token refresh (via the refresh token grant) is not possible in this case.
  * 
- * If you are building a web app, use the {@link WebSession} provided in `../web/Session`.
+ * If you are building a web app, use the WebWorkerSession implementation provided in the default `/web` version of this library.
  */
-export class SessionCore implements ISession {
+export class SessionCore implements Session {
   private isActive_: boolean = false;
   private webId_?: string = undefined;
   private currentAth_?: string = undefined;
 
   private information: SessionInformation;
-  private database?: ISessionDatabase;
+  private database?: SessionDatabase;
 
-  constructor(clientDetails?: DereferencableIdClientDetails | DynamicRegistrationClientDetails, sessionOptions?: ISessionOptions) {
+  constructor(clientDetails?: DereferencableIdClientDetails | DynamicRegistrationClientDetails, sessionOptions?: SessionOptions) {
     this.information = { clientDetails } as SessionInformation;
     this.database = sessionOptions?.database
   }

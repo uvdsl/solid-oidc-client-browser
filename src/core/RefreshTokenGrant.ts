@@ -8,9 +8,9 @@ import {
   jwtVerify,
 } from "jose";
 import { TokenDetails } from "./SessionInformation";
-import { ISessionDatabase } from "./SessionDatabase";
+import { SessionDatabase } from "./SessionDatabase";
 
-const renewTokens = async (sessionDatabase: ISessionDatabase) => {
+const renewTokens = async (sessionDatabase: SessionDatabase) => {
   // remember session details
   await sessionDatabase.init();
   const client_id = await sessionDatabase.getItem("client_id") as string;
