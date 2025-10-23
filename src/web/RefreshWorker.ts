@@ -30,11 +30,6 @@ self.onconnect = (event: any) => {
         // Listen for a message from the tab that it's closing
         if (type === 'DISCONNECT') {
             ports.delete(port);
-            // If no tabs are left, stop the timers
-            if (ports.size === 0) {
-                console.log('RefreshWorker: All tabs closed, stopping timers.');
-                clearAllTimers();
-            }
         }
     };
 
