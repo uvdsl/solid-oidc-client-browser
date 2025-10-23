@@ -280,7 +280,6 @@ private async _updateSessionDetailsFromToken(access_token?: string) {
     this.currentAth_ = await this._computeAth(access_token);
 
   } catch (error) {
-    console.warn('Failed to decode or process access token:', error);
     this.logout();
   }
 }
