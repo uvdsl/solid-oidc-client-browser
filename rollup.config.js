@@ -2,41 +2,47 @@ import typescript from 'rollup-plugin-typescript2';
 import terser from '@rollup/plugin-terser';
 import resolve from '@rollup/plugin-node-resolve';
 
-/**
- * Factory function to create a Rollup configuration for an entry point.
- * @param {string} entry - The name of the entry point (e.g., 'web' or 'core').
- * @returns {object} A Rollup configuration object.
- */
 const createConfig = (entry) => ({
-  input: `src/${entry}/index.ts`,        // Entry TypeScript file
+  input: `src/${entry}/index.ts`,
   output: [
     {
       file: `dist/esm/${entry}/index.js`,
-      format: 'esm',                     // ESM format for browsers
-      sourcemap: true,                   // Enable source maps for debugging
+      format: 'esm',
+      sourcemap: true,
     },
     {
       file: `dist/esm/${entry}/index.min.js`,
-      format: 'esm',                     // Minified ESM version
-      sourcemap: true,                   // Enable source maps
-      plugins: [terser()],               // Minify the output for smaller file size
-    }
+      format: 'esm',
+      sourcemap: true,
+      plugins: [terser()],
+    },
   ],
   plugins: [
     typescript({
-      tsconfig: './tsconfig.json',       // Use tsconfig.json for compilation
-      useTsconfigDeclarationDir: true,   // Ensure type declarations go to dist/types
+      tsconfig: './tsconfig.json',
+      useTsconfigDeclarationDir: true,
     }),
-    resolve({ 
-        browser: true,                   // Specify to resolve modules for browser environment
-      }),
-  
+    resolve({ browser: true }),
   ],
-  treeshake: true,                        // Enable tree-shaking
-  external: [],                           // Do not mark dependencies as external (bundle them)
+  treeshake: true,
 });
 
 export default [
-  createConfig('web'),
   createConfig('core'),
+  createConfig('web'),
+  {
+    input: 'src/web/RefreshWorker.ts',
+    output: {
+      file: 'dist/esm/web/RefreshWorker.js',
+      format: 'esm',
+    },
+    plugins: [
+      typescript({
+        tsconfig: './tsconfig.json',
+        // no need to generate declaration files for the worker
+        tsconfigOverride: { compilerOptions: { declaration: false } }
+      }),
+      resolve({ browser: true }),
+    ],
+  },
 ];
