@@ -64,7 +64,7 @@ export interface Session {
  * That database can be re-used by (your!) surrounding implementation to handle the refresh lifecycle.
  * If no database was provided, refresh information cannot be stored, and thus token refresh (via the refresh token grant) is not possible in this case.
  * 
- * If you are building a web app, use the WebWorkerSession implementation provided in the default `/web` version of this library.
+ * If you are building a web app, use the Session implementation provided in the default `/web` version of this library.
  */
 export class SessionCore implements Session {
   private isActive_: boolean = false;
@@ -143,15 +143,15 @@ export class SessionCore implements Session {
     this.isActive_ = false;
     this.webId_ = undefined;
     this.currentAth_ = undefined;
-    this.information.idpDetails = undefined;
-    this.information.tokenDetails = undefined;
     // only preserve client_id if URI
+    let client_id = this.information.clientDetails.client_id;
     if (this.information.clientDetails?.client_id)
       try {
         new URL(this.information.clientDetails.client_id);
       } catch (_) {
-        this.information.clientDetails.client_id = undefined;
+        client_id = undefined;
       }
+    this.information = { clientDetails: { client_id } } as SessionInformation;
     // clean session database
     if (this.database) {
       await this.database.init();
@@ -261,15 +261,29 @@ export class SessionCore implements Session {
   }
 
 
-  private async _updateSessionDetailsFromToken(access_token?: string) {
-    if (!access_token) {
-      this.logout();
-      return;
-    }
-    this.webId_ = decodeJwt(access_token)["webid"] as string;
-    this.isActive_ = this.webId !== undefined
-    this.currentAth_ = await this._computeAth(this.information.tokenDetails!.access_token)
+private async _updateSessionDetailsFromToken(access_token?: string) {
+  if (!access_token) {
+    this.logout();
+    return;
   }
+
+  try {
+    const decodedToken = decodeJwt(access_token);
+
+    const webId = decodedToken.webid as string | undefined;
+    if (!webId) {
+      throw new Error('Missing webid claim in access token');
+    }
+
+    this.webId_ = webId;
+    this.isActive_ = true;
+    this.currentAth_ = await this._computeAth(access_token);
+
+  } catch (error) {
+    console.warn('Failed to decode or process access token:', error);
+    this.logout();
+  }
+}
 
 
   //

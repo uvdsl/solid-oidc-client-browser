@@ -27,7 +27,7 @@ const redirectForLogin = async (idp: string, redirect_uri: string, client_detail
   const trim_trailing_slash = (url: string) => (url.endsWith('/') ? url.slice(0, -1) : url);
   if (trim_trailing_slash(idp) !== trim_trailing_slash(issuer)) { // expected idp matches received issuer mod trailing slash?
     throw new Error(
-      "RFC 9207 - iss != idp - " + issuer + " != " + idp
+      "RFC 9207 - iss !== idp - " + issuer + " !== " + idp
     );
   }
   sessionStorage.setItem("idp", issuer);
@@ -124,15 +124,15 @@ const onIncomingRedirect = async (client_details?: ClientDetails) => {
   }
   // RFC 9207 issuer check
   const idp = sessionStorage.getItem("idp");
-  if (idp === null || url.searchParams.get("iss") != idp) {
+  if (idp === null || url.searchParams.get("iss") !== idp) {
     throw new Error(
-      "RFC 9207 - iss != idp - " + url.searchParams.get("iss") + " != " + idp
+      "RFC 9207 - iss !== idp - " + url.searchParams.get("iss") + " !== " + idp
     );
   }
   // RFC 6749 OAuth 2.0
-  if (url.searchParams.get("state") != sessionStorage.getItem("csrf_token")) {
+  if (url.searchParams.get("state") !== sessionStorage.getItem("csrf_token")) {
     throw new Error(
-      "RFC 6749 - state != csrf_token - " + url.searchParams.get("state") + " != " + sessionStorage.getItem("csrf_token")
+      "RFC 6749 - state !== csrf_token - " + url.searchParams.get("state") + " !== " + sessionStorage.getItem("csrf_token")
     );
   }
   // remove redirect query parameters from URL
@@ -196,22 +196,22 @@ const onIncomingRedirect = async (client_details?: ClientDetails) => {
   });
   // check dpop thumbprint
   const dpopThumbprint = await calculateJwkThumbprint(await exportJWK(key_pair.publicKey))
-  if ((payload["cnf"] as any)["jkt"] != dpopThumbprint) {
+  if ((payload["cnf"] as any)["jkt"] !== dpopThumbprint) {
     throw new Error(
-      "Access Token validation failed on `jkt`: jkt != DPoP thumbprint - " + (payload["cnf"] as any)["jkt"] + " != " + dpopThumbprint
+      "Access Token validation failed on `jkt`: jkt !== DPoP thumbprint - " + (payload["cnf"] as any)["jkt"] + " !== " + dpopThumbprint
     );
   }
   // check client_id
-  if (payload["client_id"] != client_id) {
+  if (payload["client_id"] !== client_id) {
     throw new Error(
-      "Access Token validation failed on `client_id`: JWT payload != client_id - " + payload["client_id"] + " != " + client_id
+      "Access Token validation failed on `client_id`: JWT payload !== client_id - " + payload["client_id"] + " !== " + client_id
     );
   }
 
   // summarise session info
   const token_details = { ...token_response, dpop_key_pair: key_pair } as TokenDetails;
   const idp_details = { idp, jwks_uri, token_endpoint } as IdentityProviderDetails
-  if (!client_details) client_details = { redirect_uris: [window.location.href] };
+  if (!client_details) client_details = { redirect_uris: [url.toString()] };
   client_details.client_id = client_id;
 
   // clean session storage

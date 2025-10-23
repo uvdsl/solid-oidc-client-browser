@@ -4,16 +4,24 @@
 
 This library implements a very simple version of the Solid OIDC protocol:
 
-- [x] AuthorizationCodeGrant
-- [x] with PKCE (RFC 7636)
-- [x] with `iss` check (RFC 9207)
-- [x] with provided `client_id` (dereferencable to client profile document)
-- [x] with dynamic client registration 
-- [x] RefreshTokenGrant to renew tokens and to restore a session
+- [x] **Authorization Code Grant** 
+    - [x] with PKCE (RFC 7636)
+    - [x] with `iss` parameter check for enhanced security (RFC 9207)
+- [x] **RefreshTokenGrant** 
+    - [x] to renew tokens in-session
+    - [x] to restore an idle session
+- [x] **Clients** 
+    - [x] with provided `client_id` (dereferencable to Client ID Metadata Document)
+    - [x] with dynamic client registration 
 
-Good to know (see also the [security considerations](#security-considerations)):
-- [x] Uses [sessionStorage](https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage) in the AuthorizationCodeGrant to temporarily store session information like `idp`, `client_id`, `pkce_code_verifier`, and `csrf_token`. The storage is origin-bound and tab-bound. 
-- [x] Uses the [IndexedDB API](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) to store session information like `idp`, `client_id`, `refesh_token`, and the (non-extractable) DPoP KeyPair which was used in the AuthorizationCodeGrant. These are later re-used in the RefreshTokenGrant to renew the tokens or to restore a session.
+
+This library is client-side only! Please see also the [security considerations](#security-considerations).  
+Implemented for your typical web application, this library uses:
+- [x] the [sessionStorage](https://developer.mozilla.org/en-US/docs/Web/API/Window/sessionStorage) in the AuthorizationCodeGrant to temporarily store session information like `idp`, `client_id`, `pkce_code_verifier`, and `csrf_token`. The storage is origin-bound and tab-bound. 
+- [x] the [IndexedDB API](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) to store refresh token information like `idp`, `client_id`, `refesh_token`, and the (non-extractable) DPoP KeyPair which was used in the AuthorizationCodeGrant. These are later re-used in the RefreshTokenGrant to renew the tokens or to restore a session.
+
+This library also provides a core version for advanced use cases where you need to manage the refresh lifecycle yourself.
+This may be the case when the IndexedDB API is not available, e.g. in a browser extension. Please see the wiki for corresponding documentation.
 
 ## Installation
 You can use this library in your project. Let me know how you get on with it! :rocket:
@@ -24,20 +32,17 @@ npm install @uvdsl/solid-oidc-client-browser
 ```
 
 #### via a CDN provider
-For the minified version...
+You can also include the library directly in your HTML. The default export is the `web` version, which includes the background refresh worker.
 ```html
-<script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.1.3/dist/esm/index.min.js"></script>
+<script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.2.0/dist/esm/web/index.min.js"></script>
 ```
 
-And the regular version...
-```html
-<script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.1.3/dist/esm/index.js"></script>
-```
 Do not forget to adjust the version to the one you want! The latest version is displayed at the top of the README in the `npm` badge.
 
-## Example usage
+## Quick Start
 
-You can use this library along the lines of these examples:
+You can use this library along the lines of the following example.
+For other usage examples, including usage with framework Vue or a mutli-page application, see the wiki.
 
 #### in a simple HTML page with JavaScript
 
@@ -49,7 +54,7 @@ You can use this library along the lines of these examples:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Solid Login Page</title>
-    <script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.1.3/dist/esm/index.min.js"></script>
+    <script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.2.0/dist/esm/web/index.min.js"></script>
 </head>
 
 <body>
@@ -70,7 +75,7 @@ You can use this library along the lines of these examples:
 
         document.addEventListener('DOMContentLoaded', async () => {
             // Import the Session class from the library
-            const module = await import('https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.1.3/dist/esm/index.min.js');
+            const module = await import('https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.2.0/dist/esm/web/index.min.js');
             const Session = module.Session;
 
             // Create a new session
@@ -122,51 +127,6 @@ You can use this library along the lines of these examples:
 </body>
 
 </html>
-```
-
-For a multi-page application, see this [example](https://github.com/uvdsl/solid-oidc-client-browser/issues/4#issuecomment-2841098732). Note that starting from `v0.1.0` you manually store sessions using `session.restore()`. 
-It used to be called within `handleRedirectFromLogin` but we separated concerns.
-
-#### in a Single Page Application (SPA), e.g. using Vue
-
-I use [Vue](https://vuejs.org/) for my apps. If you want to see how this library is used in a Vue app, look at my [Solid App Template (Vue Edition)](https://github.com/uvdsl/solid-app-template-vue). It should (TM) work the same with the other frameworks. Here is a quick usage example:
-
-Defining a `useSolidSession` composable e.g. located in `./composables/useSolidSession`
-```ts
-import { reactive } from "vue";
-import { Session } from "@uvdsl/solid-oidc-client-browser";
-
-interface IuseSolidSession {
-  session: Session;
-}
-
-const session = reactive(new Session());
-
-export const useSolidSession = () => {
-  return { session } as IuseSolidSession;
-};
-```
-
-Usage in a component, e.g. with a login button, logout button, ...
-```ts
-import { useSolidSession } from './composables/useSolidSession';
-const { session, restoreSession } = useSolidSession();
-
-// call on a button click
-const redirect_uri = window.location.href;
-const idp = "your IDP";
-session.login(idp, redirect_uri);
-
-// in code that is being executed
-// to handle the redirect after login
-session.handleRedirectFromLogin();
-// if no redirect, restore the session
-session.restore();
-// let's have a look if we have a session
-watch(() => session.isActive, () => console.log("Logged in:", session.webId), { immediate: true });
-
-// call on a button click
-session.logout();
 ```
 
 #### After logging in ...

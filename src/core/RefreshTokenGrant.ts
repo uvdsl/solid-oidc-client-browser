@@ -12,73 +12,77 @@ import { SessionDatabase } from "./SessionDatabase";
 
 const renewTokens = async (sessionDatabase: SessionDatabase) => {
   // remember session details
-  await sessionDatabase.init();
-  const client_id = await sessionDatabase.getItem("client_id") as string;
-  const token_endpoint = await sessionDatabase.getItem("token_endpoint") as string;
-  const key_pair = await sessionDatabase.getItem("dpop_keypair") as GenerateKeyPairResult<KeyLike>;
-  const refresh_token = await sessionDatabase.getItem("refresh_token") as string;
+  try {
 
-  if (client_id === null || token_endpoint === null || key_pair === null || refresh_token === null) {
-    // we can not restore the old session
-    throw new Error("Could not refresh tokens: details missing from database.");
-  }
+    await sessionDatabase.init();
+    const client_id = await sessionDatabase.getItem("client_id") as string;
+    const token_endpoint = await sessionDatabase.getItem("token_endpoint") as string;
+    const key_pair = await sessionDatabase.getItem("dpop_keypair") as GenerateKeyPairResult<KeyLike>;
+    const refresh_token = await sessionDatabase.getItem("refresh_token") as string;
 
-  const token_response =
-    await requestFreshTokens(
-      refresh_token,
-      client_id,
-      token_endpoint,
-      key_pair
-    )
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        return response.json();
-      });
+    if (client_id === null || token_endpoint === null || key_pair === null || refresh_token === null) {
+      // we can not restore the old session
+      throw new Error("Could not refresh tokens: details missing from database.");
+    }
 
-  // verify access_token // ! Solid-OIDC specification says it should be a dpop-bound `id token` but implementations provide a dpop-bound `access token`
-  const accessToken = token_response["access_token"];
-  const idp = await sessionDatabase.getItem("idp") as string;
-  if (idp === null) {
-    throw new Error(
-      "Access Token validation preparation - Could not find in sessionDatabase: idp"
-    );
-  }
-  const jwks_uri = await sessionDatabase.getItem("jwks_uri") as string;
-  if (jwks_uri === null) {
-    throw new Error(
-      "Access Token validation preparation - Could not find in sessionDatabase: jwks_uri"
-    );
-  }
-  const jwks = createRemoteJWKSet(new URL(jwks_uri));
-  const { payload } = await jwtVerify(accessToken, jwks, {
-    issuer: idp,  // RFC 9207
-    audience: "solid", // RFC 7519 // ! "solid" as per implementations ...
-    // exp, nbf, iat - handled automatically
-  });
-  // check dpop thumbprint
-  const dpopThumbprint = await calculateJwkThumbprint(await exportJWK(key_pair.publicKey))
-  if ((payload["cnf"] as any)["jkt"] != dpopThumbprint) {
-    throw new Error(
-      "Access Token validation failed on `jkt`: jkt != DPoP thumbprint - " + (payload["cnf"] as any)["jkt"] + " != " + dpopThumbprint
-    );
-  }
-  // check client_id
-  if (payload["client_id"] != client_id) {
-    throw new Error(
-      "Access Token validation failed on `client_id`: JWT payload != client_id - " + payload["client_id"] + " != " + client_id
-    );
-  }
+    const token_response =
+      await requestFreshTokens(
+        refresh_token,
+        client_id,
+        token_endpoint,
+        key_pair
+      )
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+          return response.json();
+        });
 
-  // set new refresh token for token rotation
-  await sessionDatabase.setItem("refresh_token", token_response["refresh_token"]);
-  sessionDatabase.close();
+    // verify access_token // ! Solid-OIDC specification says it should be a dpop-bound `id token` but implementations provide a dpop-bound `access token`
+    const accessToken = token_response["access_token"];
+    const idp = await sessionDatabase.getItem("idp") as string;
+    if (idp === null) {
+      throw new Error(
+        "Access Token validation preparation - Could not find in sessionDatabase: idp"
+      );
+    }
+    const jwks_uri = await sessionDatabase.getItem("jwks_uri") as string;
+    if (jwks_uri === null) {
+      throw new Error(
+        "Access Token validation preparation - Could not find in sessionDatabase: jwks_uri"
+      );
+    }
+    const jwks = createRemoteJWKSet(new URL(jwks_uri));
+    const { payload } = await jwtVerify(accessToken, jwks, {
+      issuer: idp,  // RFC 9207
+      audience: "solid", // RFC 7519 // ! "solid" as per implementations ...
+      // exp, nbf, iat - handled automatically
+    });
+    // check dpop thumbprint
+    const dpopThumbprint = await calculateJwkThumbprint(await exportJWK(key_pair.publicKey))
+    if ((payload["cnf"] as any)["jkt"] !== dpopThumbprint) {
+      throw new Error(
+        "Access Token validation failed on `jkt`: jkt !== DPoP thumbprint - " + (payload["cnf"] as any)["jkt"] + " !== " + dpopThumbprint
+      );
+    }
+    // check client_id
+    if (payload["client_id"] !== client_id) {
+      throw new Error(
+        "Access Token validation failed on `client_id`: JWT payload !== client_id - " + payload["client_id"] + " !== " + client_id
+      );
+    }
 
-  return {
-    ...token_response,
-    dpop_key_pair: key_pair,
-  } as TokenDetails;
+    // set new refresh token for token rotation
+    await sessionDatabase.setItem("refresh_token", token_response["refresh_token"]);
+
+    return {
+      ...token_response,
+      dpop_key_pair: key_pair,
+    } as TokenDetails;
+  } finally {
+    sessionDatabase.close();
+  }
 };
 
 /**
