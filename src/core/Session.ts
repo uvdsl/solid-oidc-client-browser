@@ -130,15 +130,9 @@ export class SessionCore implements Session {
     this.isActive_ = false;
     this.webId_ = undefined;
     this.currentAth_ = undefined;
-    // only preserve client_id if URI
-    let client_id = this.information.clientDetails.client_id;
-    if (this.information.clientDetails?.client_id)
-      try {
-        new URL(this.information.clientDetails.client_id);
-      } catch (_) {
-        client_id = undefined;
-      }
-    this.information = { clientDetails: { client_id } } as SessionInformation;
+    this.information.idpDetails = undefined;
+    this.information.tokenDetails = undefined;
+    // client details are preserved
     // clean session database
     if (this.database) {
       await this.database.init();

@@ -28,17 +28,17 @@
             "minified": "./dist/esm/web/index.min.js",
             "default": "./dist/esm/web/index.js"
         },
-        "./web": {
-            "import": "./dist/esm/web/index.js",
-            "types": "./dist/types/web/index.d.ts",
-            "minified": "./dist/esm/web/index.min.js",
-            "default": "./dist/esm/web/index.js"
-        },
         "./core": {
             "import": "./dist/esm/core/index.js",
             "types": "./dist/types/core/index.d.ts",
             "minified": "./dist/esm/core/index.min.js",
             "default": "./dist/esm/core/index.js"
+        },
+        "./web": {
+            "import": "./dist/esm/web/index.js",
+            "types": "./dist/types/web/index.d.ts",
+            "minified": "./dist/esm/web/index.min.js",
+            "default": "./dist/esm/web/index.js"
         },
         "./RefreshWorker": {
             "import": "./dist/esm/web/RefreshWorker.js",

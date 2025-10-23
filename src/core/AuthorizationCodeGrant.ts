@@ -61,8 +61,12 @@ const redirectForLogin = async (idp: string, redirect_uri: string, client_detail
           return response.json();
         });
     client_id = client_registration["client_id"] as string;
-    // remember client_id
-    sessionStorage.setItem("client_id", client_id!);
+  }
+  // remember client_id if not URL
+  try {
+    new URL(client_id)
+  } catch {
+    sessionStorage.setItem("client_id", client_id);
   }
 
   // RFC 7636 PKCE, remember code verifer

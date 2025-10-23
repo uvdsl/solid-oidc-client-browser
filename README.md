@@ -70,44 +70,56 @@ For other usage examples, including usage with framework Vue or a mutli-page app
     </div>
 
     <script>
-        // Initialize the session
+       // Initialize the session
         let session;
 
         document.addEventListener('DOMContentLoaded', async () => {
-            // Import the Session class from the library
             const module = await import('https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.2.0/dist/esm/web/index.min.js');
             const Session = module.Session;
 
+            const sessionOptions = {
+                onSessionExpirationWarning: () => {
+                    console.warn("Session is about to expire!");
+                    document.getElementById('welcome-message').textContent = "Warning: Session is expiring soon.";
+                },
+                onSessionExpiration: () => {
+                    console.warn("Session is expired!");
+                    document.getElementById('webid').textContent = "not logged in.";
+                    document.getElementById('welcome-message').textContent =
+                        "You're not logged in.";
+                }
+            };
+
             // Create a new session
-            session = new Session();
+            const clientDetails  = {
+                redirect_uris: [window.location.href],
+                client_name: "uvdsl's Solid App Template"
+            };
+            session = new Session(clientDetails, sessionOptions);
+
 
             // Set up the login button
             document.getElementById('loginButton').addEventListener('click', () => {
-                // Use a default IDP or let user specify one
-                const idp = "https://solidcommunity.net/"; // Default IDP - you can change this
-                const redirect_uri = window.location.href;
-
-                // Redirect to login
+                const idp = "https://solidcommunity.net/";
+                const redirect_uri = window.location.href; // The URL of this page
                 session.login(idp, redirect_uri);
             });
 
             // Set up the logout button
             document.getElementById('logoutButton').addEventListener('click', () => {
                 session.logout();
-                // Update the UI
                 document.getElementById('webid').textContent = "not logged in.";
                 document.getElementById('welcome-message').textContent =
                     "You're not logged in.";
             });
 
-            
+            // Handle redirect after login
             try {
                 // either: handle redirect after login
                 await session.handleRedirectFromLogin();
                 // or: try to restore the session
                 await session.restore();
 
-                // Update the UI
                 if (session.webId) {
                     document.getElementById('webid').textContent = session.webId;
                     document.getElementById('welcome-message').textContent =
@@ -121,7 +133,6 @@ For other usage examples, including usage with framework Vue or a mutli-page app
                 document.getElementById('welcome-message').textContent =
                     "Error restoring session. Please try logging in again.";
             }
-
         });
     </script>
 </body>
