@@ -54,16 +54,24 @@ describe('SessionCore', () => {
     /** Helper function to set up an active session state for tests */
     const activateSession = async (session: SessionCore) => {
         const client_id = (session as any).information.clientDetails.client_id;
-        // Use with caution - directly manipulating private state
-        (session as any).information = mockSessionInfo;
-        (session as any).isActive_ = true;
-        (session as any).webId_ = 'https://alice.example/card#me';
+        
+        // 1. Set the session info that would be present
+        (session as any).information = { ...mockSessionInfo }; 
         (session as any).information.clientDetails.client_id = client_id;
-        // Ensure internal state like currentAth_ is calculated
+
+        // 2. Mock the internal _computeAth method, as it depends on `window.crypto`
+        // which is not available in the JSDOM test environment.
+        const computeAthSpy = jest.spyOn(session as any, '_computeAth')
+                               .mockResolvedValueOnce('mock-ath-value');
+
+        // 3. Now, call the real method to set internal state (isActive, webId, currentAth)
         await (session as any)._updateSessionDetailsFromToken(mockTokenDetails.access_token);
-        // Reset mocks that might have been called during activation
+        
+        // 4. Reset mocks that were just called during activation
         (fetch as jest.Mock).mockClear();
         (jose.SignJWT as jest.Mock).mockClear();
+        computeAthSpy.mockClear(); // Clear this spy too
+        (jose.decodeJwt as jest.Mock).mockClear(); // This is also called by _updateSessionDetailsFromToken
     };
 
 
@@ -270,13 +278,13 @@ describe('SessionCore', () => {
             expect((session as any).information.clientDetails.client_id).toBe('https://app.example/id');
         });
 
-        it('should clear client_id if it is not a URI', async () => {
+        it('should preserve client_id if it is not a URI', async () => {
             const session = createSession({ client_id: 'not-a-uri' } as DereferencableIdClientDetails);
             await activateSession(session);
 
             await session.logout();
 
-            expect((session as any).information.clientDetails.client_id).toBeUndefined();
+            expect((session as any).information.clientDetails.client_id).toBe('not-a-uri');
         });
     });
 

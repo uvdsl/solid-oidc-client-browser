@@ -25,7 +25,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/31</span>
+                <span class='fraction'>0/33</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/31</span>
+                <span class='fraction'>0/33</span>
             </div>
         
             
@@ -155,7 +155,11 @@
 <a name='L90'></a><a href='#L90'>90</a>
 <a name='L91'></a><a href='#L91'>91</a>
 <a name='L92'></a><a href='#L92'>92</a>
-<a name='L93'></a><a href='#L93'>93</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L93'></a><a href='#L93'>93</a>
+<a name='L94'></a><a href='#L94'>94</a>
+<a name='L95'></a><a href='#L95'>95</a>
+<a name='L96'></a><a href='#L96'>96</a>
+<a name='L97'></a><a href='#L97'>97</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -176,6 +180,15 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -183,12 +196,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -204,6 +211,7 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -256,6 +264,7 @@ import { SessionIDB } from './SessionDatabase';
 export interface WebWorkerSessionOptions extends SessionOptions {
     workerUrl?: string | URL;
     onSessionExpirationWarning?: () =&gt; void;
+    onSessionExpiration?: () =&gt; void;
 }
 &nbsp;
 /**
@@ -265,6 +274,7 @@ export class WebWorkerSession implements Session {
     private sessionCore: SessionCore;
     private worker: SharedWorker;
     private onSessionExpirationWarning?: () =&gt; void;
+    private onSessionExpiration?: () =&gt; void;
 &nbsp;
 <span class="fstat-no" title="function not covered" >    constructor(</span>
         clientDetails?: DereferencableIdClientDetails | DynamicRegistrationClientDetails,
@@ -274,6 +284,7 @@ export class WebWorkerSession implements Session {
         const options = <span class="cstat-no" title="statement not covered" >{ ...sessionOptions, database };</span>
 <span class="cstat-no" title="statement not covered" >        this.sessionCore = new SessionCore(clientDetails, options);</span>
 <span class="cstat-no" title="statement not covered" >        this.onSessionExpirationWarning = sessionOptions?.onSessionExpirationWarning;</span>
+<span class="cstat-no" title="statement not covered" >        this.onSessionExpiration = sessionOptions?.onSessionExpiration;</span>
 &nbsp;
         // Allow consumer to provide worker URL, or use default
         const workerUrl = <span class="cstat-no" title="statement not covered" >sessionOptions?.workerUrl ?? new URL('./RefreshWorker.js', import.meta.url);</span>
@@ -297,6 +308,7 @@ export class WebWorkerSession implements Session {
 <span class="cstat-no" title="statement not covered" >                break;</span>
             case 'PLEASE_LOGOUT':
 <span class="cstat-no" title="statement not covered" >                await this.sessionCore.logout();</span>
+<span class="cstat-no" title="statement not covered" >                this.onSessionExpiration?.();</span>
 <span class="cstat-no" title="statement not covered" >                break;</span>
         }
     };
@@ -346,7 +358,7 @@ export class WebWorkerSession implements Session {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-23T14:27:19.477Z
+                at 2025-10-23T15:40:12.678Z
             </div>
         <script src="../prettify.js"></script>
         <script>

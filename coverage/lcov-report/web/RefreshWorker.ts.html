@@ -25,14 +25,14 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/46</span>
+                <span class='fraction'>0/45</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/10</span>
+                <span class='fraction'>0/9</span>
             </div>
         
             
@@ -46,7 +46,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/44</span>
+                <span class='fraction'>0/43</span>
             </div>
         
             
@@ -157,9 +157,7 @@
 <a name='L92'></a><a href='#L92'>92</a>
 <a name='L93'></a><a href='#L93'>93</a>
 <a name='L94'></a><a href='#L94'>94</a>
-<a name='L95'></a><a href='#L95'>95</a>
-<a name='L96'></a><a href='#L96'>96</a>
-<a name='L97'></a><a href='#L97'>97</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L95'></a><a href='#L95'>95</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -219,28 +217,15 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -250,10 +235,21 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { renewTokens } from "../core/RefreshTokenGrant";
 import { SessionIDB } from "./SessionDatabase";
@@ -274,13 +270,13 @@ let timersAreRunning = <span class="cstat-no" title="statement not covered" >fal
         const { type, payload } = <span class="cstat-no" title="statement not covered" >event.data;</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        <span class="missing-if-branch" title="if path not taken" >I</span>if (type === 'START' &amp;&amp; !timersAreRunning) {</span>
-<span class="cstat-no" title="statement not covered" >            console.log('Worker: Received START, scheduling timers.');</span>
+<span class="cstat-no" title="statement not covered" >            console.log(`RefreshWorker: Received START, scheduling timers, expiry in ${payload.expiresIn}s`);</span>
 <span class="cstat-no" title="statement not covered" >            scheduleTimers(payload.expiresIn);</span>
 <span class="cstat-no" title="statement not covered" >            timersAreRunning = true;</span>
         }
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        <span class="missing-if-branch" title="if path not taken" >I</span>if (type === 'STOP') {</span>
-<span class="cstat-no" title="statement not covered" >            console.log('Worker: Received STOP, clearing timers.');</span>
+<span class="cstat-no" title="statement not covered" >            console.log('RefreshWorker: Received STOP, clearing timers.');</span>
 <span class="cstat-no" title="statement not covered" >            clearAllTimers();</span>
         }
 &nbsp;
@@ -289,7 +285,7 @@ let timersAreRunning = <span class="cstat-no" title="statement not covered" >fal
 <span class="cstat-no" title="statement not covered" >            ports.delete(port);</span>
             // If no tabs are left, stop the timers
 <span class="cstat-no" title="statement not covered" >            <span class="missing-if-branch" title="if path not taken" >I</span>if (ports.size === 0) {</span>
-<span class="cstat-no" title="statement not covered" >                console.log('Worker: All tabs closed, stopping timers.');</span>
+<span class="cstat-no" title="statement not covered" >                console.log('RefreshWorker: All tabs closed, stopping timers.');</span>
 <span class="cstat-no" title="statement not covered" >                clearAllTimers();</span>
             }
         }
@@ -299,7 +295,7 @@ let timersAreRunning = <span class="cstat-no" title="statement not covered" >fal
 };
 &nbsp;
 function <span class="fstat-no" title="function not covered" >broadcast(</span>message: any) {
-<span class="cstat-no" title="statement not covered" >    console.log(`Worker: Broadcasting message of type ${message.type} to ${ports.size} port(s).`);</span>
+<span class="cstat-no" title="statement not covered" >    console.log(`RefreshWorker: Broadcasting message of type ${message.type} to ${ports.size} port(s).`);</span>
 <span class="cstat-no" title="statement not covered" >    for (const port of ports) {</span>
 <span class="cstat-no" title="statement not covered" >        port.postMessage(message);</span>
     }
@@ -314,6 +310,7 @@ async function <span class="fstat-no" title="function not covered" >performRefre
 <span class="cstat-no" title="statement not covered" >        broadcast({ type: 'TOKEN_REFRESHED', payload: { tokenDetails } });</span>
 &nbsp;
         // Reschedule the next cycle
+<span class="cstat-no" title="statement not covered" >        console.log(`RefreshWorker: Token refreshed, scheduling timers, expiry in ${tokenDetails.expires_in}s`);</span>
 <span class="cstat-no" title="statement not covered" >        scheduleTimers(tokenDetails.expires_in);</span>
     } catch (error: any) {
         // If refresh fails, warn ALL tabs
@@ -334,10 +331,9 @@ function <span class="fstat-no" title="function not covered" >scheduleTimers(</s
     const expiresInMs = <span class="cstat-no" title="statement not covered" >expiresIn * 1000;</span>
 &nbsp;
     // Schedule refresh (e.g., 120 seconds before expiration)
-    const refreshBufferMs = <span class="cstat-no" title="statement not covered" >120 * 1000;</span>
-    const timeUntilRefresh = <span class="cstat-no" title="statement not covered" >expiresInMs - refreshBufferMs;</span>
+    const timeUntilRefresh = <span class="cstat-no" title="statement not covered" >0.8 * expiresInMs;</span>
 &nbsp;
-<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (timeUntilRefresh &gt; 0) {</span>
+<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (timeUntilRefresh &gt; 30) {</span>
 <span class="cstat-no" title="statement not covered" >        refreshTimeout = setTimeout(performRefresh, timeUntilRefresh);</span>
     }
 &nbsp;
@@ -345,12 +341,10 @@ function <span class="fstat-no" title="function not covered" >scheduleTimers(</s
     const logoutBufferMs = <span class="cstat-no" title="statement not covered" >5 * 1000;</span>
     const timeUntilLogout = <span class="cstat-no" title="statement not covered" >expiresInMs - logoutBufferMs;</span>
 &nbsp;
-<span class="cstat-no" title="statement not covered" >    <span class="missing-if-branch" title="if path not taken" >I</span>if (timeUntilLogout &gt; 0) {</span>
-<span class="cstat-no" title="statement not covered" >        finalLogoutTimeout = setTimeout(<span class="fstat-no" title="function not covered" >() =</span>&gt; {</span>
-            // Broadcast the logout warning to ALL tabs
-<span class="cstat-no" title="statement not covered" >            broadcast({ type: 'PLEASE_LOGOUT' });</span>
-        }, timeUntilLogout);
-    }
+<span class="cstat-no" title="statement not covered" >    finalLogoutTimeout = setTimeout(<span class="fstat-no" title="function not covered" >() =</span>&gt; {</span>
+        // Broadcast the logout warning to ALL tabs
+<span class="cstat-no" title="statement not covered" >        broadcast({ type: 'PLEASE_LOGOUT' });</span>
+    }, timeUntilLogout);
 }</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
@@ -358,7 +352,7 @@ function <span class="fstat-no" title="function not covered" >scheduleTimers(</s
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-23T14:27:19.477Z
+                at 2025-10-23T15:40:12.678Z
             </div>
         <script src="../prettify.js"></script>
         <script>
