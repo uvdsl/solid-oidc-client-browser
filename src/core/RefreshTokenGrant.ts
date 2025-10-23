@@ -110,7 +110,7 @@ const requestFreshTokens = async (
     htm: "POST",
   })
     .setIssuedAt()
-    .setJti(window.crypto.randomUUID())
+    .setJti(self.crypto.randomUUID())
     .setProtectedHeader({
       alg: "ES256",
       typ: "dpop+jwt",

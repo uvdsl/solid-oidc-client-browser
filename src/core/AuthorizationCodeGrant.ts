@@ -1,6 +1,7 @@
 import { createRemoteJWKSet, generateKeyPair, jwtVerify, exportJWK, SignJWT, GenerateKeyPairResult, KeyLike, calculateJwkThumbprint } from "jose";
 import { requestDynamicClientRegistration } from "./DynamicClientRegistration";
 import { ClientDetails, DynamicRegistrationClientDetails, IdentityProviderDetails, SessionInformation, TokenDetails } from "./SessionInformation";
+import { SessionDatabase } from "./SessionDatabase";
 
 /**
  * Login with the idp, using a provided `client_id` or dynamic client registration if none provided.
@@ -114,7 +115,7 @@ const getPKCEcode = async () => {
  * URL contains authrization code, issuer (idp) and state (csrf token),
  * get an access token for the authrization code.
  */
-const onIncomingRedirect = async (client_details?: ClientDetails) => {
+const onIncomingRedirect = async (client_details?: ClientDetails, database?: SessionDatabase) => {
   const url = new URL(window.location.href);
   // authorization code
   const authorization_code = url.searchParams.get("code");
@@ -213,6 +214,20 @@ const onIncomingRedirect = async (client_details?: ClientDetails) => {
   const idp_details = { idp, jwks_uri, token_endpoint } as IdentityProviderDetails
   if (!client_details) client_details = { redirect_uris: [url.toString()] };
   client_details.client_id = client_id;
+
+  // and persist refresh token details
+  if (database) {
+    await database.init();
+    await Promise.all([
+      database.setItem("idp", idp),
+      database.setItem("jwks_uri", jwks_uri),
+      database.setItem("token_endpoint", token_endpoint),
+      database.setItem("client_id", client_id),
+      database.setItem("dpop_keypair", key_pair),
+      database.setItem("refresh_token", token_response["refresh_token"])
+    ]);
+    database.close();
+  }
 
   // clean session storage
   sessionStorage.removeItem("csrf_token");

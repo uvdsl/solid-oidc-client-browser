@@ -25,28 +25,28 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/26</span>
+                <span class='fraction'>0/31</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/8</span>
+                <span class='fraction'>0/7</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/9</span>
+                <span class='fraction'>0/11</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/26</span>
+                <span class='fraction'>0/31</span>
             </div>
         
             
@@ -145,7 +145,20 @@
 <a name='L80'></a><a href='#L80'>80</a>
 <a name='L81'></a><a href='#L81'>81</a>
 <a name='L82'></a><a href='#L82'>82</a>
-<a name='L83'></a><a href='#L83'>83</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L83'></a><a href='#L83'>83</a>
+<a name='L84'></a><a href='#L84'>84</a>
+<a name='L85'></a><a href='#L85'>85</a>
+<a name='L86'></a><a href='#L86'>86</a>
+<a name='L87'></a><a href='#L87'>87</a>
+<a name='L88'></a><a href='#L88'>88</a>
+<a name='L89'></a><a href='#L89'>89</a>
+<a name='L90'></a><a href='#L90'>90</a>
+<a name='L91'></a><a href='#L91'>91</a>
+<a name='L92'></a><a href='#L92'>92</a>
+<a name='L93'></a><a href='#L93'>93</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -168,24 +181,31 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -234,6 +254,7 @@ import { SessionIDB } from './SessionDatabase';
 // Any provided database via SessionOptions will be ignored.
 // Database will be an IndexedDB.
 export interface WebWorkerSessionOptions extends SessionOptions {
+    workerUrl?: string | URL;
     onSessionExpirationWarning?: () =&gt; void;
 }
 &nbsp;
@@ -245,31 +266,40 @@ export class WebWorkerSession implements Session {
     private worker: SharedWorker;
     private onSessionExpirationWarning?: () =&gt; void;
 &nbsp;
-<span class="fstat-no" title="function not covered" >    constructor(c</span>lientDetails?: DereferencableIdClientDetails | DynamicRegistrationClientDetails, sessionOptions?: WebWorkerSessionOptions) {
-        // create session core and provide it with persistent database
+<span class="fstat-no" title="function not covered" >    constructor(</span>
+        clientDetails?: DereferencableIdClientDetails | DynamicRegistrationClientDetails,
+        sessionOptions?: WebWorkerSessionOptions
+    ) {
         const database = <span class="cstat-no" title="statement not covered" >new SessionIDB();</span>
         const options = <span class="cstat-no" title="statement not covered" >{ ...sessionOptions, database };</span>
 <span class="cstat-no" title="statement not covered" >        this.sessionCore = new SessionCore(clientDetails, options);</span>
-        // expiration warning
 <span class="cstat-no" title="statement not covered" >        this.onSessionExpirationWarning = sessionOptions?.onSessionExpirationWarning;</span>
-        // Initialize the worker and set up communication
-<span class="cstat-no" title="statement not covered" >        this.worker = new SharedWorker(new URL('./RefreshWorker.ts', import.meta.url));</span>
+&nbsp;
+        // Allow consumer to provide worker URL, or use default
+        const workerUrl = <span class="cstat-no" title="statement not covered" >sessionOptions?.workerUrl ?? new URL('./RefreshWorker.js', import.meta.url);</span>
+<span class="cstat-no" title="statement not covered" >        this.worker = new SharedWorker(workerUrl, { type: 'module' });</span>
 <span class="cstat-no" title="statement not covered" >        this.worker.port.onmessage = <span class="fstat-no" title="function not covered" >(e</span>vent) =&gt; {</span>
-            const { type, payload } = <span class="cstat-no" title="statement not covered" >event.data;</span>
-<span class="cstat-no" title="statement not covered" >            if (type === 'TOKEN_REFRESHED') {</span>
-                // When the worker sends new tokens, update the core session's state
-<span class="cstat-no" title="statement not covered" >                this.sessionCore.setTokenDetails(payload.tokenDetails);</span>
-            } else <span class="cstat-no" title="statement not covered" >if (type === 'EXPIRATION_WARNING') {</span>
-                // If the developer provided a callback, call it.
-<span class="cstat-no" title="statement not covered" >                <span class="missing-if-branch" title="if path not taken" >I</span>if (this.onSessionExpirationWarning) {</span>
-<span class="cstat-no" title="statement not covered" >                    this.onSessionExpirationWarning();</span>
-                }
-            } else <span class="cstat-no" title="statement not covered" ><span class="missing-if-branch" title="if path not taken" >I</span>if (type === 'PLEASE_LOGOUT') {</span>
-                // If the worker recommends a logout, execute it.
-<span class="cstat-no" title="statement not covered" >                this.sessionCore.logout();</span>
-            }
+<span class="cstat-no" title="statement not covered" >            this.handleWorkerMessage(event.data).catch(console.error);</span>
         };
+<span class="cstat-no" title="statement not covered" >        window.addEventListener('beforeunload', <span class="fstat-no" title="function not covered" >() =</span>&gt; {</span>
+<span class="cstat-no" title="statement not covered" >            this.worker.port.postMessage({ type: 'DISCONNECT' });</span>
+        });
     }
+&nbsp;
+    private handleWorkerMessage = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >async </span>(data: any) =&gt; {</span>
+        const { type, payload } = <span class="cstat-no" title="statement not covered" >data;</span>
+<span class="cstat-no" title="statement not covered" >        switch (type) {</span>
+            case 'TOKEN_REFRESHED':
+<span class="cstat-no" title="statement not covered" >                await this.sessionCore.setTokenDetails(payload.tokenDetails);</span>
+<span class="cstat-no" title="statement not covered" >                break;</span>
+            case 'EXPIRATION_WARNING':
+<span class="cstat-no" title="statement not covered" >                this.onSessionExpirationWarning?.();</span>
+<span class="cstat-no" title="statement not covered" >                break;</span>
+            case 'PLEASE_LOGOUT':
+<span class="cstat-no" title="statement not covered" >                await this.sessionCore.logout();</span>
+<span class="cstat-no" title="statement not covered" >                break;</span>
+        }
+    };
 &nbsp;
 <span class="fstat-no" title="function not covered" >    async </span>login(idp: string, redirect_uri: string) {
 <span class="cstat-no" title="statement not covered" >        return this.sessionCore.login(idp, redirect_uri);</span>
@@ -316,7 +346,7 @@ export class WebWorkerSession implements Session {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2025-10-23T10:45:53.373Z
+                at 2025-10-23T14:27:19.477Z
             </div>
         <script src="../prettify.js"></script>
         <script>

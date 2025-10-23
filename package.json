@@ -39,6 +39,10 @@
             "types": "./dist/types/core/index.d.ts",
             "minified": "./dist/esm/core/index.min.js",
             "default": "./dist/esm/core/index.js"
+        },
+        "./RefreshWorker": {
+            "import": "./dist/esm/web/RefreshWorker.js",
+            "default": "./dist/esm/web/RefreshWorker.js"
         }
     },
     "types": "./dist/types/web/index.d.ts",

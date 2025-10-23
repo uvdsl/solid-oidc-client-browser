@@ -5,6 +5,7 @@ import * as jose from 'jose';
 // Import the module to be mocked
 import * as DynamicClientRegistration from '../../src/core/DynamicClientRegistration';
 import { ClientDetails } from '../../src/core/SessionInformation';
+import { SessionDatabase } from '../../src/core/SessionDatabase';
 
 // --- JEST MOCKS ---
 
@@ -45,7 +46,7 @@ describe('redirectForLogin', () => {
       ok: true,
       json: () => Promise.resolve(mockOpenIdConfig),
     });
-    
+
     await redirectForLogin('https://idp.example.com/', 'https://app.example.com/redirect', { client_id: 'test-client' } as ClientDetails);
 
     // 1. Verify openid-config was fetched
@@ -72,10 +73,10 @@ describe('redirectForLogin', () => {
       json: () => Promise.resolve(mockOpenIdConfig),
     });
     (DynamicClientRegistration.requestDynamicClientRegistration as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ client_id: 'dynamic-client-id' })
+      ok: true,
+      json: () => Promise.resolve({ client_id: 'dynamic-client-id' })
     });
-    
+
     await redirectForLogin('https://idp.example.com/', 'https://app.example.com/redirect');
 
     // 1. Verify dynamic registration was called
@@ -83,7 +84,7 @@ describe('redirectForLogin', () => {
 
     // 2. Verify the dynamic client_id was stored
     expect(sessionStorage.setItem).toHaveBeenCalledWith('client_id', 'dynamic-client-id');
-    
+
     // 3. Verify the redirect used the dynamic client_id
     const redirectUrl = new URL((window.location.href));
     expect(redirectUrl.searchParams.get('client_id')).toBe('dynamic-client-id');
@@ -109,23 +110,23 @@ describe('redirectForLogin', () => {
       ok: true,
       json: () => Promise.resolve({ ...mockOpenIdConfig, issuer: 'https://wrong-idp.com/' }),
     });
-    
+
     await expect(redirectForLogin('https://idp.example.com/', 'https://app.example.com/redirect')).rejects.toThrow(
       'RFC 9207 - iss !== idp - https://wrong-idp.com/ !== https://idp.example.com/'
     );
   });
-  
+
   it('should throw an error if no open-id configuration could be obtained', async () => {
     (fetch as jest.Mock).mockResolvedValueOnce({
       ok: false, // Simulate a network or server error
       status: 404,
     });
-    
+
     await expect(redirectForLogin('https://idp.example.com/', 'https://app.example.com/redirect')).rejects.toThrow(
       'HTTP error! Status: 404'
     );
   });
-  
+
   it('must construct a compliant redirect_uri with all required params', async () => {
     (fetch as jest.Mock).mockResolvedValueOnce({
       ok: true,
@@ -133,10 +134,10 @@ describe('redirectForLogin', () => {
     });
 
     await redirectForLogin('https://idp.example.com/', 'https://app.example.com/redirect', { client_id: 'test-client' } as ClientDetails);
-    
+
     const redirectUrl = new URL(window.location.href);
     const params = redirectUrl.searchParams;
-    
+
     expect(params.get('response_type')).toBe('code');
     expect(params.get('redirect_uri')).toBe('https://app.example.com/redirect');
     expect(params.get('scope')).toContain('openid');
@@ -179,7 +180,7 @@ describe('redirectForLogin', () => {
 
       // We expect this not to throw an iss error and proceed to redirect
       await redirectForLogin(idp, 'https://app.example.com/redirect', { client_id: 'test-client' } as ClientDetails);
-      
+
       // A simple assertion to confirm the function proceeded past the check
       expect(sessionStorage.setItem).toHaveBeenCalledWith('idp', issuer);
     });
@@ -188,195 +189,295 @@ describe('redirectForLogin', () => {
 
 
 describe('onIncomingRedirect', () => {
-    const mockTokenResponse = {
-        access_token: 'mock-access-token',
-        refresh_token: 'mock-refresh-token',
-    };
+  const mockTokenResponse = {
+    access_token: 'mock-access-token',
+    refresh_token: 'mock-refresh-token',
+  };
 
-    const mockJwtPayload = {
-        iss: 'https://idp.example.com/',
-        aud: 'solid',
-        client_id: 'test-client',
-        cnf: { jkt: 'mock-thumbprint' },
-    };
+  const mockJwtPayload = {
+    iss: 'https://idp.example.com/',
+    aud: 'solid',
+    client_id: 'test-client',
+    cnf: { jkt: 'mock-thumbprint' },
+  };
 
-    beforeEach(() => {
-        // Pre-populate sessionStorage as if redirectForLogin had run
-        sessionStorage.setItem('idp', 'https://idp.example.com/');
-        sessionStorage.setItem('csrf_token', 'mock-csrf-token');
-        sessionStorage.setItem('pkce_code_verifier', 'mock-pkce-verifier');
-        sessionStorage.setItem('token_endpoint', 'https://idp.example.com/token');
-        sessionStorage.setItem('jwks_uri', 'https://idp.example.com/jwks');
+  beforeEach(() => {
+    // Pre-populate sessionStorage as if redirectForLogin had run
+    sessionStorage.setItem('idp', 'https://idp.example.com/');
+    sessionStorage.setItem('csrf_token', 'mock-csrf-token');
+    sessionStorage.setItem('pkce_code_verifier', 'mock-pkce-verifier');
+    sessionStorage.setItem('token_endpoint', 'https://idp.example.com/token');
+    sessionStorage.setItem('jwks_uri', 'https://idp.example.com/jwks');
+  });
+
+  it('should do nothing if no authorization code is in the URL', async () => {
+    mockLocation('https://app.example.com/redirect');
+    const result = await onIncomingRedirect({ client_id: 'test-client' } as ClientDetails);
+    expect(result.tokenDetails).toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('should successfully exchange the code for tokens and validate them', async () => {
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
+    (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockTokenResponse),
+    });
+    (jose.jwtVerify as jest.Mock).mockResolvedValueOnce({ payload: mockJwtPayload });
+    (jose.calculateJwkThumbprint as jest.Mock).mockResolvedValueOnce('mock-thumbprint');
+
+    const result = await onIncomingRedirect({ client_id: 'test-client' } as ClientDetails);
+
+    // 1. Verify token endpoint was called
+    expect(fetch).toHaveBeenCalledWith('https://idp.example.com/token', expect.any(Object));
+
+    // 2. Verify token was validated
+    expect(jose.jwtVerify).toHaveBeenCalled();
+
+    // 3. Verify DPoP thumbprint was checked
+    expect(jose.calculateJwkThumbprint).toHaveBeenCalled();
+
+    // 4. Verify result contains correct details
+    expect(result.tokenDetails?.access_token).toBe('mock-access-token');
+    expect(result.idpDetails?.idp).toBe('https://idp.example.com/');
+
+    // 5. Verify sessionStorage was cleaned
+    expect(sessionStorage.getItem('csrf_token')).toBeNull();
+  });
+
+  it('should write session info to database if provided on success', async () => {
+    // Arrange: Mock the URL and session storage (like a successful redirect)
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
+    sessionStorage.setItem('pkce_code_verifier', 'mock-code-verifier');
+    sessionStorage.setItem('csrf_token', 'mock-csrf-token');
+    sessionStorage.setItem('idp', 'https://idp.example.com/');
+    sessionStorage.setItem('token_endpoint', 'https://idp.example.com/token');
+    sessionStorage.setItem('jwks_uri', 'https://idp.example.com/jwks');
+
+    // Arrange: Mock the token endpoint fetch
+    (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockTokenResponse), // Ensure mockTokenResponse has a refresh_token
     });
 
-    it('should do nothing if no authorization code is in the URL', async () => {
-        mockLocation('https://app.example.com/redirect');
-        const result = await onIncomingRedirect({ client_id: 'test-client' } as ClientDetails);
-        expect(result.tokenDetails).toBeUndefined();
-        expect(fetch).not.toHaveBeenCalled();
+    // Arrange: Mock token validation
+    (jose.jwtVerify as jest.Mock).mockResolvedValueOnce({ payload: mockJwtPayload });
+    (jose.calculateJwkThumbprint as jest.Mock).mockResolvedValueOnce('mock-thumbprint');
+
+    // Arrange: Mock DPoP key generation to get a predictable key_pair
+    const mockKeyPair = { publicKey: 'mock-public-key', privateKey: 'mock-private-key' };
+    (jose.generateKeyPair as jest.Mock).mockResolvedValueOnce(mockKeyPair as any);
+
+    // Arrange: Create a mock database
+    const mockDb = {
+      init: jest.fn().mockResolvedValue(undefined),
+      setItem: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+      getItem: jest.fn(), // Add other unused methods for a complete mock
+      deleteItem: jest.fn(),
+      clear: jest.fn()
+    } as jest.Mocked<SessionDatabase>;
+
+    // Act: Call the function with client details AND the mock database
+    await onIncomingRedirect({ client_id: 'test-client' } as ClientDetails, mockDb);
+
+    // Assert: Check that the database methods were called correctly
+    expect(mockDb.init).toHaveBeenCalledTimes(1);
+
+    // Check that all expected items are being saved
+    expect(mockDb.setItem).toHaveBeenCalledWith('idp', 'https://idp.example.com/');
+    expect(mockDb.setItem).toHaveBeenCalledWith('jwks_uri', 'https://idp.example.com/jwks');
+    expect(mockDb.setItem).toHaveBeenCalledWith('token_endpoint', 'https://idp.example.com/token');
+    expect(mockDb.setItem).toHaveBeenCalledWith('client_id', { client_id: 'test-client' }.client_id);
+    expect(mockDb.setItem).toHaveBeenCalledWith('dpop_keypair', mockKeyPair);
+    expect(mockDb.setItem).toHaveBeenCalledWith('refresh_token', mockTokenResponse.refresh_token);
+
+    // Check that Promise.all would have contained all these calls
+    expect(mockDb.setItem).toHaveBeenCalledTimes(6);
+
+    expect(mockDb.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not attempt database operations if no database is provided', async () => {
+    // Arrange: Mock the full "happy path" again
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
+    sessionStorage.setItem('pkce_code_verifier', 'mock-code-verifier');
+    sessionStorage.setItem('csrf_token', 'mock-csrf-token');
+    sessionStorage.setItem('idp', 'https://idp.example.com/');
+    sessionStorage.setItem('token_endpoint', 'https://idp.example.com/token');
+    sessionStorage.setItem('jwks_uri', 'https://idp.example.com/jwks');
+
+    (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockTokenResponse),
     });
 
-    it('should successfully exchange the code for tokens and validate them', async () => {
-        mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
-        (fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: () => Promise.resolve(mockTokenResponse),
-        });
-        (jose.jwtVerify as jest.Mock).mockResolvedValueOnce({ payload: mockJwtPayload });
-        (jose.calculateJwkThumbprint as jest.Mock).mockResolvedValueOnce('mock-thumbprint');
+    (jose.jwtVerify as jest.Mock).mockResolvedValueOnce({ payload: mockJwtPayload });
+    (jose.calculateJwkThumbprint as jest.Mock).mockResolvedValueOnce('mock-thumbprint');
+    (jose.generateKeyPair as jest.Mock).mockResolvedValueOnce({} as any); // Mock key generation
 
-        const result = await onIncomingRedirect({ client_id: 'test-client' } as ClientDetails);
+    // Reset mockDb calls (assuming mockDb is defined in a beforeEach)
+    const mockDb = {
+      init: jest.fn().mockResolvedValue(undefined),
+      setItem: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+      getItem: jest.fn(), // Add other unused methods for a complete mock
+      deleteItem: jest.fn(),
+      clear: jest.fn()
+    } as jest.Mocked<SessionDatabase>;
+    mockDb.init.mockClear();
+    mockDb.setItem.mockClear();
+    mockDb.close.mockClear();
 
-        // 1. Verify token endpoint was called
-        expect(fetch).toHaveBeenCalledWith('https://idp.example.com/token', expect.any(Object));
+    // Act: Call the function WITHOUT the database parameter
+    // (passing undefined is the same as omitting it)
+    const result = await onIncomingRedirect({ client_id: 'test-client' } as ClientDetails, undefined);
 
-        // 2. Verify token was validated
-        expect(jose.jwtVerify).toHaveBeenCalled();
-        
-        // 3. Verify DPoP thumbprint was checked
-        expect(jose.calculateJwkThumbprint).toHaveBeenCalled();
+    // Assert: Check that the function still succeeded and returned info
+    expect(result.clientDetails).toEqual({ client_id: 'test-client' } as ClientDetails);
+    expect(result.tokenDetails?.access_token).toBe(mockTokenResponse.access_token);
+    expect(result.idpDetails?.idp).toBe('https://idp.example.com/');
 
-        // 4. Verify result contains correct details
-        expect(result.tokenDetails?.access_token).toBe('mock-access-token');
-        expect(result.idpDetails?.idp).toBe('https://idp.example.com/');
-        
-        // 5. Verify sessionStorage was cleaned
-        expect(sessionStorage.getItem('csrf_token')).toBeNull();
+    // Assert: Check that the database was NOT touched
+    expect(mockDb.init).not.toHaveBeenCalled();
+    expect(mockDb.setItem).not.toHaveBeenCalled();
+    expect(mockDb.close).not.toHaveBeenCalled();
+  });
+
+  it('should throw an error on CSRF token mismatch', async () => {
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=wrong-token&iss=https://idp.example.com/');
+
+    await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
+      'RFC 6749 - state !== csrf_token - wrong-token !== mock-csrf-token'
+    );
+  });
+
+  it('should throw an error on DPoP thumbprint mismatch', async () => {
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
+    (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockTokenResponse),
+    });
+    (jose.jwtVerify as jest.Mock).mockResolvedValueOnce({ payload: mockJwtPayload });
+    (jose.calculateJwkThumbprint as jest.Mock).mockResolvedValueOnce('DIFFERENT-thumbprint'); // This is the key part of the test
+
+    await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
+      'Access Token validation failed on `jkt`'
+    );
+  });
+
+  it('should throw an error on iss mismatch', async () => {
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://wrong-idp.com/');
+
+    await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
+      'RFC 9207 - iss !== idp - https://wrong-idp.com/ !== https://idp.example.com/'
+    );
+  });
+
+  it('should throw an error if pkce_code_verifier is missing', async () => {
+    sessionStorage.removeItem('pkce_code_verifier');
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
+
+    await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
+      'Could not find in sessionStorage: pkce_code_verifier'
+    );
+  });
+
+  it('should throw an error if token_endpoint is missing', async () => {
+    sessionStorage.removeItem('token_endpoint');
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
+
+    await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
+      'Could not find in sessionStorage: token_endpoint'
+    );
+  });
+
+  it('should throw an error if token request fails', async () => {
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
+    (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 401,
     });
 
-    it('should throw an error on CSRF token mismatch', async () => {
-        mockLocation('https://app.example.com/redirect?code=auth-code&state=wrong-token&iss=https://idp.example.com/');
-        
-        await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
-            'RFC 6749 - state !== csrf_token - wrong-token !== mock-csrf-token'
-        );
+    await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
+      'HTTP error! Status: 401'
+    );
+  });
+
+  it('should throw an error if jwks_uri is missing', async () => {
+    sessionStorage.removeItem('jwks_uri');
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
+    (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockTokenResponse),
     });
 
-    it('should throw an error on DPoP thumbprint mismatch', async () => {
-        mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
-        (fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: () => Promise.resolve(mockTokenResponse),
-        });
-        (jose.jwtVerify as jest.Mock).mockResolvedValueOnce({ payload: mockJwtPayload });
-        (jose.calculateJwkThumbprint as jest.Mock).mockResolvedValueOnce('DIFFERENT-thumbprint'); // This is the key part of the test
-        
-        await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
-            'Access Token validation failed on `jkt`'
-        );
+    await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
+      'Could not find in sessionStorage: jwks_uri'
+    );
+  });
+
+  it('should throw an error if jwtVerify fails', async () => {
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
+    (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockTokenResponse),
     });
+    (jose.jwtVerify as jest.Mock).mockRejectedValueOnce(new Error('Invalid signature'));
 
-    it('should throw an error on iss mismatch', async () => {
-        mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://wrong-idp.com/');
-        
-        await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
-            'RFC 9207 - iss !== idp - https://wrong-idp.com/ !== https://idp.example.com/'
-        );
+    await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
+      'Invalid signature'
+    );
+  });
+
+  it('should throw an error if client_id in token does not match', async () => {
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
+    (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockTokenResponse),
     });
+    const wrongPayload = { ...mockJwtPayload, client_id: 'wrong-client' };
+    (jose.jwtVerify as jest.Mock).mockResolvedValueOnce({ payload: wrongPayload });
+    (jose.calculateJwkThumbprint as jest.Mock).mockResolvedValueOnce('mock-thumbprint');
 
-    it('should throw an error if pkce_code_verifier is missing', async () => {
-        sessionStorage.removeItem('pkce_code_verifier');
-        mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
+    await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
+      'Access Token validation failed on `client_id`'
+    );
+  });
 
-        await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
-            'Could not find in sessionStorage: pkce_code_verifier'
-        );
+  it('should throw an error if no client_id is available', async () => {
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
+
+    // Ensure no client_id is passed and none is in sessionStorage
+    sessionStorage.removeItem('client_id');
+
+    await expect(onIncomingRedirect(undefined)).rejects.toThrow(
+      'Access Token Request preparation - Could not find in sessionStorage: client_id (dynamic registration)'
+    );
+  });
+
+  it('should create clientDetails if none are provided on success', async () => {
+    const url = 'https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/';
+    mockLocation(url);
+    (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockTokenResponse),
     });
+    // This test assumes dynamic registration happened, so client_id is in sessionStorage
+    sessionStorage.setItem('client_id', 'dynamic-client-id');
+    const dynamicPayload = { ...mockJwtPayload, client_id: 'dynamic-client-id' };
+    (jose.jwtVerify as jest.Mock).mockResolvedValueOnce({ payload: dynamicPayload });
+    (jose.calculateJwkThumbprint as jest.Mock).mockResolvedValueOnce('mock-thumbprint');
 
-    it('should throw an error if token_endpoint is missing', async () => {
-        sessionStorage.removeItem('token_endpoint');
-        mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
+    // Call the function without clientDetails
+    const result = await onIncomingRedirect(undefined);
 
-        await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
-            'Could not find in sessionStorage: token_endpoint'
-        );
-    });
-    
-    it('should throw an error if token request fails', async () => {
-        mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
-        (fetch as jest.Mock).mockResolvedValueOnce({
-            ok: false,
-            status: 401,
-        });
+    // Assert that the returned clientDetails object was created correctly
+    expect(result.clientDetails).toBeDefined();
+    expect(result.clientDetails?.client_id).toBe('dynamic-client-id');
+    // The URL is captured before it is cleaned, so we expect the full URL.
+    expect((result.clientDetails as any).redirect_uris).toEqual(['https://app.example.com/redirect']);
+  });
 
-        await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
-            'HTTP error! Status: 401'
-        );
-    });
-    
-    it('should throw an error if jwks_uri is missing', async () => {
-        sessionStorage.removeItem('jwks_uri');
-        mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
-        (fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: () => Promise.resolve(mockTokenResponse),
-        });
-
-        await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
-            'Could not find in sessionStorage: jwks_uri'
-        );
-    });
-
-    it('should throw an error if jwtVerify fails', async () => {
-        mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
-        (fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: () => Promise.resolve(mockTokenResponse),
-        });
-        (jose.jwtVerify as jest.Mock).mockRejectedValueOnce(new Error('Invalid signature'));
-
-        await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
-            'Invalid signature'
-        );
-    });
-
-    it('should throw an error if client_id in token does not match', async () => {
-        mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
-        (fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: () => Promise.resolve(mockTokenResponse),
-        });
-        const wrongPayload = { ...mockJwtPayload, client_id: 'wrong-client' };
-        (jose.jwtVerify as jest.Mock).mockResolvedValueOnce({ payload: wrongPayload });
-        (jose.calculateJwkThumbprint as jest.Mock).mockResolvedValueOnce('mock-thumbprint');
-
-        await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails)).rejects.toThrow(
-            'Access Token validation failed on `client_id`'
-        );
-    });
-
-    it('should throw an error if no client_id is available', async () => {
-        mockLocation('https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/');
-        
-        // Ensure no client_id is passed and none is in sessionStorage
-        sessionStorage.removeItem('client_id');
-        
-        await expect(onIncomingRedirect(undefined)).rejects.toThrow(
-          'Access Token Request preparation - Could not find in sessionStorage: client_id (dynamic registration)'
-        );
-    });
-
-    it('should create clientDetails if none are provided on success', async () => {
-        const url = 'https://app.example.com/redirect?code=auth-code&state=mock-csrf-token&iss=https://idp.example.com/';
-        mockLocation(url);
-        (fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: () => Promise.resolve(mockTokenResponse),
-        });
-        // This test assumes dynamic registration happened, so client_id is in sessionStorage
-        sessionStorage.setItem('client_id', 'dynamic-client-id');
-        const dynamicPayload = { ...mockJwtPayload, client_id: 'dynamic-client-id' };
-        (jose.jwtVerify as jest.Mock).mockResolvedValueOnce({ payload: dynamicPayload });
-        (jose.calculateJwkThumbprint as jest.Mock).mockResolvedValueOnce('mock-thumbprint');
-
-        // Call the function without clientDetails
-        const result = await onIncomingRedirect(undefined);
-
-        // Assert that the returned clientDetails object was created correctly
-        expect(result.clientDetails).toBeDefined();
-        expect(result.clientDetails?.client_id).toBe('dynamic-client-id');
-        // The URL is captured before it is cleaned, so we expect the full URL.
-        expect((result.clientDetails as any).redirect_uris).toEqual(['https://app.example.com/redirect']);
-    });
 });
 

@@ -91,25 +91,12 @@ export class SessionCore implements Session {
    */
   async handleRedirectFromLogin() {
     // Redirect after Authorization Code Grant // memory via sessionStorage
-    const newSessionInfo = await onIncomingRedirect(this.information.clientDetails);
+    const newSessionInfo = await onIncomingRedirect(this.information.clientDetails, this.database);
     // no session - we remain unauthenticated
     if (!newSessionInfo.tokenDetails) return;
     // we got a session
     this.information = newSessionInfo;
     await this._updateSessionDetailsFromToken(this.information.tokenDetails?.access_token);
-    // and persist refresh token details
-    if (this.database) {
-      await this.database.init();
-      await Promise.all([
-        this.database.setItem("idp", this.information.idpDetails?.idp),
-        this.database.setItem("jwks_uri", this.information.idpDetails?.jwks_uri),
-        this.database.setItem("token_endpoint", this.information.idpDetails?.token_endpoint),
-        this.database.setItem("client_id", this.information.clientDetails.client_id),
-        this.database.setItem("dpop_keypair", this.information.tokenDetails?.dpop_key_pair),
-        this.database.setItem("refresh_token", this.information.tokenDetails?.refresh_token),
-      ]);
-      this.database.close();
-    }
   }
 
   /**
@@ -261,28 +248,24 @@ export class SessionCore implements Session {
   }
 
 
-private async _updateSessionDetailsFromToken(access_token?: string) {
-  if (!access_token) {
-    this.logout();
-    return;
-  }
-
-  try {
-    const decodedToken = decodeJwt(access_token);
-
-    const webId = decodedToken.webid as string | undefined;
-    if (!webId) {
-      throw new Error('Missing webid claim in access token');
+  private async _updateSessionDetailsFromToken(access_token?: string) {
+    if (!access_token) {
+      this.logout();
+      return;
     }
-
-    this.webId_ = webId;
-    this.isActive_ = true;
-    this.currentAth_ = await this._computeAth(access_token);
-
-  } catch (error) {
-    this.logout();
+    try {
+      const decodedToken = decodeJwt(access_token);
+      const webId = decodedToken.webid as string | undefined;
+      if (!webId) {
+        throw new Error('Missing webid claim in access token');
+      }
+      this.currentAth_ = await this._computeAth(access_token); // must be done before session set to active
+      this.webId_ = webId;
+      this.isActive_ = true;
+    } catch (error) {
+      this.logout();
+    }
   }
-}
 
 
   //
@@ -297,14 +280,13 @@ private async _updateSessionDetailsFromToken(access_token?: string) {
     return this.webId_;
   }
 
-  setTokenDetails(tokenDetails: TokenDetails) {
+  async setTokenDetails(tokenDetails: TokenDetails) {
     this.information.tokenDetails = tokenDetails;
-    this._updateSessionDetailsFromToken(tokenDetails.access_token)
+    await this._updateSessionDetailsFromToken(tokenDetails.access_token)
   }
 
   getExpiresIn() {
-    const logoutBuffer = 5;
-    return (this.information.tokenDetails!.expires_in ?? -1) - logoutBuffer;
+    return this.information.tokenDetails!.expires_in ?? -1;
   }
 
 }

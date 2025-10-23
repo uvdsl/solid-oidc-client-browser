@@ -144,26 +144,10 @@ describe('SessionCore', () => {
 
             // Assert
             expect(AuthCodeGrant.onIncomingRedirect).toHaveBeenCalledTimes(1);
-            expect(AuthCodeGrant.onIncomingRedirect).toHaveBeenCalledWith(mockClientDetails);
+            expect(AuthCodeGrant.onIncomingRedirect).toHaveBeenCalledWith(mockClientDetails, mockDb);
             expect(session.isActive).toBe(true);
             expect(session.webId).toBe('https://alice.example/card#me');
             expect((session as any).information).toEqual(mockSessionInfo);
-        });
-
-        it('should write session info to database if provided', async () => {
-            // Arrange
-            (AuthCodeGrant.onIncomingRedirect as jest.Mock).mockResolvedValueOnce(mockSessionInfo);
-            const session = createSession(mockClientDetails, { database: mockDb });
-
-            // Act
-            await session.handleRedirectFromLogin();
-
-            // Assert
-            expect(mockDb.init).toHaveBeenCalledTimes(1);
-            expect(mockDb.setItem).toHaveBeenCalledWith('idp', mockSessionInfo.idpDetails?.idp);
-            // ... add checks for other setItem calls ...
-            expect(mockDb.setItem).toHaveBeenCalledWith('refresh_token', mockSessionInfo.tokenDetails?.refresh_token);
-            expect(mockDb.close).toHaveBeenCalledTimes(1);
         });
 
         it('should remain inactive if onIncomingRedirect returns no token details', async () => {
@@ -182,20 +166,6 @@ describe('SessionCore', () => {
             expect(mockDb.setItem).not.toHaveBeenCalled();
         });
 
-        it('should not attempt database write if no database is provided', async () => {
-            // Arrange
-            (AuthCodeGrant.onIncomingRedirect as jest.Mock).mockResolvedValueOnce(mockSessionInfo);
-            const session = new SessionCore(mockClientDetails); // No database
-
-            // Act
-            await session.handleRedirectFromLogin();
-
-            // Assert
-            expect(session.isActive).toBe(true);
-            expect(mockDb.init).not.toHaveBeenCalled();
-            expect(mockDb.setItem).not.toHaveBeenCalled();
-            expect(mockDb.close).not.toHaveBeenCalled();
-        });
     });
 
     // --- Restore Tests ---
@@ -409,16 +379,27 @@ describe('SessionCore', () => {
             expect((session as any).information.tokenDetails).toEqual(mockTokenDetails);
         });
 
-        it('should call _updateSessionDetailsFromToken to update state', () => {
+        it('setTokenDetails should update session state on success', async () => {
+            // Arrange
             const session = createSession();
-            const updateSpy = jest.spyOn(session as any, '_updateSessionDetailsFromToken');
 
-            session.setTokenDetails(mockTokenDetails);
+            // Mock the dependencies of the private method that setTokenDetails calls
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me' });
 
-            expect(updateSpy).toHaveBeenCalledTimes(1);
-            expect(updateSpy).toHaveBeenCalledWith(mockTokenDetails.access_token);
+            // Spy on the internal _computeAth method to mock its implementation
+            const computeAthSpy = jest.spyOn(session as any, '_computeAth')
+                .mockResolvedValueOnce('mock-ath-value');
+
+            // Act
+            await session.setTokenDetails(mockTokenDetails);
+
+            // Assert
+            // Check that the state was set correctly
             expect(session.isActive).toBe(true);
             expect(session.webId).toBe('https://alice.example/card#me');
+            expect((session as any).currentAth_).toBe('mock-ath-value');
+            expect(jose.decodeJwt).toHaveBeenCalledWith(mockTokenDetails.access_token);
+            expect(computeAthSpy).toHaveBeenCalledWith(mockTokenDetails.access_token);
         });
     });
 
@@ -427,7 +408,7 @@ describe('SessionCore', () => {
         it('should calculate remaining time correctly (returns seconds)', () => {
             const session = createSession();
             session.setTokenDetails({ ...mockTokenDetails, expires_in: 900 });
-            expect(session.getExpiresIn()).toBe(895); // 900s - 5s buffer
+            expect(session.getExpiresIn()).toBe(900);
         });
 
         it('should return a negative value if expires_in is missing or invalid', () => {
