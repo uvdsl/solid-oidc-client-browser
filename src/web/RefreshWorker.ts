@@ -1,3 +1,4 @@
+import { decodeJwt } from "jose";
 import { renewTokens } from "../core/RefreshTokenGrant";
 import { TokenDetails } from "../core/SessionInformation";
 import { SessionIDB } from "./SessionDatabase";
@@ -23,6 +24,7 @@ let refreshTimeout: any;
 let finalLogoutTimeout: any;
 let timersAreRunning = false;
 let tokenDetails: TokenDetails | undefined = undefined;
+let exp: number | undefined;
 
 self.onconnect = (event: any) => {
     const port = event.ports[0];
@@ -38,7 +40,7 @@ self.onconnect = (event: any) => {
         }
 
         if (type === RefreshMessageTypes.REFRESH) {
-            if (tokenDetails) {
+            if (tokenDetails && exp && !isTokenExpired(exp)) {
                 console.log(`RefreshWorker: Provide current tokens to requesting port`);
                 port.postMessage({ type: RefreshMessageTypes.TOKEN_DETAILS, payload: { tokenDetails } });
             } else {
@@ -50,6 +52,7 @@ self.onconnect = (event: any) => {
         if (type === RefreshMessageTypes.STOP) {
             console.log('RefreshWorker: Received STOP, clearing timers.');
             tokenDetails = undefined;
+            exp = undefined;
             clearAllTimers();
         }
 
@@ -77,8 +80,10 @@ async function performRefresh() {
     const database = new SessionIDB();
     try {
         tokenDetails = await renewTokens(database);
+        exp = decodeJwt(tokenDetails.access_token).exp;
         // On success, broadcast the new token details to ALL tabs
         broadcast({ type: RefreshMessageTypes.TOKEN_DETAILS, payload: { tokenDetails } });
+        
         // Reschedule the next cycle
         console.log(`RefreshWorker: Token refreshed, scheduling timers, expiry in ${tokenDetails.expires_in}s`);
         scheduleTimers(tokenDetails.expires_in);
@@ -114,3 +119,11 @@ function scheduleTimers(expiresIn: number) {
         broadcast({ type: RefreshMessageTypes.EXPIRED });
     }, timeUntilLogout);
 }
+
+function isTokenExpired(exp: number, bufferSeconds = 0) {
+    if (typeof exp !== 'number' || isNaN(exp)) {
+      return true;
+    }
+    const currentTimeSeconds = Math.floor(Date.now() / 1000);
+    return exp < (currentTimeSeconds + bufferSeconds);
+  }
