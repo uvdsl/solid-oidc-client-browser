@@ -68,6 +68,7 @@ export interface Session {
  */
 export class SessionCore implements Session {
   private isActive_: boolean = false;
+  private exp_?: number;
   private webId_?: string = undefined;
   private currentAth_?: string = undefined;
 
@@ -128,6 +129,7 @@ export class SessionCore implements Session {
   async logout() {
     // clean session data
     this.isActive_ = false;
+    this.exp_ = undefined;
     this.webId_ = undefined;
     this.currentAth_ = undefined;
     this.information.idpDetails = undefined;
@@ -168,7 +170,7 @@ export class SessionCore implements Session {
     }
 
     // create DPoP token, and add tokens to request
-    if (this.information.tokenDetails) {
+    if (this.information.tokenDetails) { // TODO tie to expiration?
       dpopPayload = dpopPayload ?? {
         htu: `${url.origin}${url.pathname}`,
         htm: method.toUpperCase()
@@ -244,7 +246,7 @@ export class SessionCore implements Session {
 
   private async _updateSessionDetailsFromToken(access_token?: string) {
     if (!access_token) {
-      this.logout();
+      await this.logout();
       return;
     }
     try {
@@ -253,12 +255,28 @@ export class SessionCore implements Session {
       if (!webId) {
         throw new Error('Missing webid claim in access token');
       }
+      const exp = decodedToken.exp
+      if (!exp) {
+        throw new Error('Missing exp claim in access token');
+      }
       this.currentAth_ = await this._computeAth(access_token); // must be done before session set to active
       this.webId_ = webId;
+      this.exp_ = exp;
       this.isActive_ = true;
     } catch (error) {
-      this.logout();
+      await this.logout();
     }
+  }
+
+  /**
+    * Checks if a JWT expiration timestamp ('exp') has passed.
+    */
+  private _isTokenExpired(exp: number, bufferSeconds = 0) {
+    if (typeof exp !== 'number' || isNaN(exp)) {
+      return true;
+    }
+    const currentTimeSeconds = Math.floor(Date.now() / 1000);
+    return exp < (currentTimeSeconds + bufferSeconds);
   }
 
 
@@ -281,6 +299,11 @@ export class SessionCore implements Session {
 
   getExpiresIn() {
     return this.information.tokenDetails!.expires_in ?? -1;
+  }
+
+  isExpired() {
+    if (!this.exp_) return true;
+    return this._isTokenExpired(this.exp_);
   }
 
 }

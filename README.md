@@ -118,7 +118,7 @@ For other usage examples, including usage with framework Vue or a mutli-page app
                 // either: handle redirect after login
                 await session.handleRedirectFromLogin();
                 // or: try to restore the session
-                await session.restore();
+                await session.restore().catch(e => console.log(e.message));
 
                 if (session.webId) {
                     document.getElementById('webid').textContent = session.webId;

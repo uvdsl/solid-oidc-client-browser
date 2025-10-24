@@ -1,5 +1,6 @@
 import { DereferencableIdClientDetails, DynamicRegistrationClientDetails } from '../core';
 import { Session, SessionOptions, SessionCore } from '../core/Session';
+import { RefreshMessageTypes } from './RefreshWorker';
 import { SessionIDB } from './SessionDatabase';
 
 // Any provided database via SessionOptions will be ignored.
@@ -13,11 +14,15 @@ export interface WebWorkerSessionOptions extends SessionOptions {
 /**
  * This Session provides background token refreshing using a Web Worker.
  */
-export class WebWorkerSession implements Session {
-    private sessionCore: SessionCore;
+export class WebWorkerSession extends SessionCore {
     private worker: SharedWorker;
+
     private onSessionExpirationWarning?: () => void;
     private onSessionExpiration?: () => void;
+
+    private refreshPromise?: Promise<void>;
+    private resolveRefresh?: (() => void);
+    private rejectRefresh?: ((reason?: any) => void);
 
     constructor(
         clientDetails?: DereferencableIdClientDetails | DynamicRegistrationClientDetails,
@@ -25,7 +30,7 @@ export class WebWorkerSession implements Session {
     ) {
         const database = new SessionIDB();
         const options = { ...sessionOptions, database };
-        this.sessionCore = new SessionCore(clientDetails, options);
+        super(clientDetails, options);
         this.onSessionExpirationWarning = sessionOptions?.onSessionExpirationWarning;
         this.onSessionExpiration = sessionOptions?.onSessionExpiration;
 
@@ -36,62 +41,85 @@ export class WebWorkerSession implements Session {
             this.handleWorkerMessage(event.data).catch(console.error);
         };
         window.addEventListener('beforeunload', () => {
-            this.worker.port.postMessage({ type: 'DISCONNECT' });
+            this.worker.port.postMessage({ type: RefreshMessageTypes.DISCONNECT });
         });
     }
 
     private handleWorkerMessage = async (data: any) => {
-        const { type, payload } = data;
+        const { type, payload, error } = data;
         switch (type) {
-            case 'TOKEN_REFRESHED':
-                await this.sessionCore.setTokenDetails(payload.tokenDetails);
+            case RefreshMessageTypes.TOKEN_DETAILS:
+                await this.setTokenDetails(payload.tokenDetails);
+                if (this.refreshPromise && this.resolveRefresh) {
+                    this.resolveRefresh();
+                    this.clearRefreshPromise();
+                }
                 break;
-            case 'EXPIRATION_WARNING':
-                this.onSessionExpirationWarning?.();
+            case RefreshMessageTypes.ERROR_ON_REFRESH:
+                if (this.isActive)
+                    this.onSessionExpirationWarning?.();
+                if (this.refreshPromise && this.rejectRefresh) {
+                    if (this.isActive) {
+                        this.rejectRefresh(new Error(error || 'Token refresh failed'));
+                    } else {
+                        this.rejectRefresh(new Error("No session to restore."));
+                    }
+                    this.clearRefreshPromise();
+                }
                 break;
-            case 'PLEASE_LOGOUT':
-                await this.sessionCore.logout();
+            case RefreshMessageTypes.EXPIRED:
+                await this.logout();
                 this.onSessionExpiration?.();
+                if (this.refreshPromise && this.rejectRefresh) {
+                    this.rejectRefresh(new Error(error || 'Token refresh failed'));
+                    this.clearRefreshPromise();
+                }
                 break;
         }
     };
 
-    async login(idp: string, redirect_uri: string) {
-        return this.sessionCore.login(idp, redirect_uri);
-    }
 
     async handleRedirectFromLogin() {
-        await this.sessionCore.handleRedirectFromLogin();
-        // If login was successful, tell the worker to start refreshing
-
-        if (this.sessionCore.isActive) {
-            this.worker.port.postMessage({ type: 'START', payload: { expiresIn: this.sessionCore.getExpiresIn() } });
+        await super.handleRedirectFromLogin();
+        if (this.isActive) { // If login was successful, tell the worker to schedule refreshing
+            this.worker.port.postMessage({ type: RefreshMessageTypes.SCHEDULE, payload: { expiresIn: this.getExpiresIn() } });
         }
     }
 
     async restore() {
-        await this.sessionCore.restore();
-        // If restoration was successful, tell the worker to start refreshing
-        if (this.sessionCore.isActive) {
-            this.worker.port.postMessage({ type: 'START', payload: { expiresIn: this.sessionCore.getExpiresIn() } });
-        }
+        this.worker.port.postMessage({ type: RefreshMessageTypes.REFRESH });
+        this.refreshPromise = new Promise((resolve, reject) => {
+            this.resolveRefresh = resolve;
+            this.rejectRefresh = reject;
+        });
+        return this.refreshPromise;
     }
 
     async logout() {
-        // Tell the worker to stop refreshing before clearing session
-        this.worker.port.postMessage({ type: 'STOP' });
-        await this.sessionCore.logout();
+        this.worker.port.postMessage({ type: RefreshMessageTypes.STOP });
+        await super.logout();
     }
 
     async authFetch(input: string | URL | Request, init?: RequestInit, dpopPayload?: any) {
-        return this.sessionCore.authFetch(input, init, dpopPayload);
+        if (this.isExpired()) {
+            try {
+                if (!this.refreshPromise) {
+                    await this.restore(); // Initiate and wait
+                } else {
+                    await this.refreshPromise; // Wait for already pending
+                }
+            } catch (refreshError) {
+                console.error("Session refresh failed during authFetch:", refreshError);
+                throw new Error("Session expired and could not be refreshed.");
+            }
+        }
+        return super.authFetch(input, init, dpopPayload);
     }
 
-    get isActive() {
-        return this.sessionCore.isActive;
+    private clearRefreshPromise() {
+        this.refreshPromise = undefined;
+        this.resolveRefresh = undefined;
+        this.rejectRefresh = undefined;
     }
 
-    get webId() {
-        return this.sessionCore.webId;
-    }
 }

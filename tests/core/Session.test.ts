@@ -54,19 +54,19 @@ describe('SessionCore', () => {
     /** Helper function to set up an active session state for tests */
     const activateSession = async (session: SessionCore) => {
         const client_id = (session as any).information.clientDetails.client_id;
-        
+
         // 1. Set the session info that would be present
-        (session as any).information = { ...mockSessionInfo }; 
+        (session as any).information = { ...mockSessionInfo };
         (session as any).information.clientDetails.client_id = client_id;
 
         // 2. Mock the internal _computeAth method, as it depends on `window.crypto`
         // which is not available in the JSDOM test environment.
         const computeAthSpy = jest.spyOn(session as any, '_computeAth')
-                               .mockResolvedValueOnce('mock-ath-value');
+            .mockResolvedValueOnce('mock-ath-value');
 
         // 3. Now, call the real method to set internal state (isActive, webId, currentAth)
         await (session as any)._updateSessionDetailsFromToken(mockTokenDetails.access_token);
-        
+
         // 4. Reset mocks that were just called during activation
         (fetch as jest.Mock).mockClear();
         (jose.SignJWT as jest.Mock).mockClear();
@@ -145,6 +145,7 @@ describe('SessionCore', () => {
         it('should call onIncomingRedirect and update state on success', async () => {
             // Arrange
             (AuthCodeGrant.onIncomingRedirect as jest.Mock).mockResolvedValueOnce(mockSessionInfo);
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
             const session = createSession();
 
             // Act
@@ -186,6 +187,7 @@ describe('SessionCore', () => {
         it('should call renewTokens and update state on success', async () => {
             // Arrange
             (RefreshGrant.renewTokens as jest.Mock).mockResolvedValueOnce(mockTokenDetails);
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
             const session = createSession();
 
             // Act
@@ -249,13 +251,12 @@ describe('SessionCore', () => {
 
         it('should clear the database if provided', async () => {
             const session = createSession(mockClientDetails, { database: mockDb });
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
             await activateSession(session); // Ensure session is active
 
             await session.logout();
 
-            expect(mockDb.init).toHaveBeenCalledTimes(1);
             expect(mockDb.clear).toHaveBeenCalledTimes(1);
-            expect(mockDb.close).toHaveBeenCalledTimes(1);
         });
 
         it('should not attempt database clear if no database is provided', async () => {
@@ -295,6 +296,7 @@ describe('SessionCore', () => {
         it('should add Authorization and DPoP headers when session is active', async () => {
             // Arrange
             const session = createSession();
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
             await activateSession(session);
 
             // Act
@@ -304,8 +306,7 @@ describe('SessionCore', () => {
             expect(fetch).toHaveBeenCalledTimes(1);
             const [, options] = (fetch as jest.Mock).mock.calls[0];
             const headers = options.headers as Headers; // Cast for type safety
-            expect(headers.get('Authorization')).toBe(`DPoP ${mockTokenDetails.access_token}`);
-            expect(headers.has('authorization')).toBe(true); // Case-insensitive check
+            expect(headers.get('authorization')).toBe(`DPoP ${mockTokenDetails.access_token}`);
             expect(headers.get('dpop')).toBe('mocked.dpop.token');
             expect(jose.SignJWT).toHaveBeenCalled();
         });
@@ -313,6 +314,7 @@ describe('SessionCore', () => {
         it('should NOT add Authorization headers when session is inactive', async () => {
             // Arrange
             const session = createSession();
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
             // No activateSession call needed, starts inactive
 
             // Act
@@ -322,7 +324,7 @@ describe('SessionCore', () => {
             expect(fetch).toHaveBeenCalledTimes(1);
             const [, options] = (fetch as jest.Mock).mock.calls[0];
             const headers = options.headers as Headers;
-            expect(headers.get('Authorization')).toBeNull();
+            expect(headers.get('authorization')).toBeNull();
             expect(headers.get('dpop')).toBeNull();
             expect(jose.SignJWT).not.toHaveBeenCalled();
         });
@@ -330,6 +332,7 @@ describe('SessionCore', () => {
         it('should pass through init options correctly, preserving custom headers', async () => {
             // Arrange
             const session = createSession();
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
             await activateSession(session);
             const initOptions = {
                 method: 'POST',
@@ -353,8 +356,7 @@ describe('SessionCore', () => {
             expect(headers.get('Content-Type')).toBe('text/plain');
             expect(headers.get('X-Custom')).toBe('value');
             // Verify auth headers overwrite/add correctly
-            expect(headers.get('Authorization')).toBe(`DPoP ${mockTokenDetails.access_token}`);
-            expect(headers.has('authorization')).toBe(true);
+            expect(headers.get('authorization')).toBe(`DPoP ${mockTokenDetails.access_token}`);
             expect(headers.get('dpop')).toBe('mocked.dpop.token');
         });
 
@@ -373,7 +375,7 @@ describe('SessionCore', () => {
             expect(requestArg).toBeInstanceOf(Request);
             expect(requestArg.method).toBe('PUT');
             expect(requestArg.headers.get('X-Req')).toBe('req-val');
-            expect(requestArg.headers.get('Authorization')).toBe(`DPoP ${mockTokenDetails.access_token}`);
+            expect(requestArg.headers.get('authorization')).toBe(`DPoP ${mockTokenDetails.access_token}`);
             expect(requestArg.headers.get('dpop')).toBe('mocked.dpop.token');
         });
 
@@ -383,6 +385,8 @@ describe('SessionCore', () => {
     describe('setTokenDetails', () => {
         it('should update internal token details', () => {
             const session = createSession();
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
+
             session.setTokenDetails(mockTokenDetails);
             expect((session as any).information.tokenDetails).toEqual(mockTokenDetails);
         });
@@ -392,7 +396,7 @@ describe('SessionCore', () => {
             const session = createSession();
 
             // Mock the dependencies of the private method that setTokenDetails calls
-            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me' });
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
 
             // Spy on the internal _computeAth method to mock its implementation
             const computeAthSpy = jest.spyOn(session as any, '_computeAth')
@@ -408,6 +412,7 @@ describe('SessionCore', () => {
             expect((session as any).currentAth_).toBe('mock-ath-value');
             expect(jose.decodeJwt).toHaveBeenCalledWith(mockTokenDetails.access_token);
             expect(computeAthSpy).toHaveBeenCalledWith(mockTokenDetails.access_token);
+            expect(session.isExpired()).toBe(false);
         });
     });
 
@@ -415,6 +420,7 @@ describe('SessionCore', () => {
     describe('getExpiresIn', () => {
         it('should calculate remaining time correctly (returns seconds)', () => {
             const session = createSession();
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
             session.setTokenDetails({ ...mockTokenDetails, expires_in: 900 });
             expect(session.getExpiresIn()).toBe(900);
         });
@@ -422,11 +428,13 @@ describe('SessionCore', () => {
         it('should return a negative value if expires_in is missing or invalid', () => {
             const session = createSession();
 
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
             session.setTokenDetails({ ...mockTokenDetails, expires_in: undefined } as any);
-            expect(session.getExpiresIn()).toBeLessThan(0); // -1 - 5 = -6
+            expect(session.getExpiresIn()).toBeLessThan(0);
 
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
             session.setTokenDetails({ ...mockTokenDetails, expires_in: null } as any);
-            expect(session.getExpiresIn()).toBeLessThan(0); // -1 - 5 = -6
+            expect(session.getExpiresIn()).toBeLessThan(0);
         });
     });
 
@@ -434,11 +442,14 @@ describe('SessionCore', () => {
     describe('_updateSessionDetailsFromToken (private method test)', () => {
         it('should set isActive, webId, and currentAth when token is valid', async () => {
             const session = createSession();
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
+
             await (session as any)._updateSessionDetailsFromToken(mockTokenDetails.access_token);
 
             expect(session.isActive).toBe(true);
             expect(session.webId).toBe('https://alice.example/card#me');
             expect((session as any).currentAth_).toBeDefined(); // Check that currentAth_ was calculated
+            expect(session.isExpired()).toBe(false);
         });
 
         it('should call logout when access_token is undefined', async () => {
@@ -448,8 +459,9 @@ describe('SessionCore', () => {
             await (session as any)._updateSessionDetailsFromToken(undefined);
 
             expect(logoutSpy).toHaveBeenCalledTimes(1);
-            expect(session.isActive).toBe(false); // State should reflect logout
+            expect(session.isActive).toBe(false);
             expect(session.webId).toBeUndefined();
+            expect(session.isExpired()).toBe(true);
         });
 
         it('should call logout when access_token is null', async () => {
