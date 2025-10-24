@@ -28,7 +28,7 @@ const redirectForLogin = async (idp: string, redirect_uri: string, client_detail
   const trim_trailing_slash = (url: string) => (url.endsWith('/') ? url.slice(0, -1) : url);
   if (trim_trailing_slash(idp) !== trim_trailing_slash(issuer)) { // expected idp matches received issuer mod trailing slash?
     throw new Error(
-      "RFC 9207 - iss != idp - " + issuer + " != " + idp
+      "RFC 9207 - iss !== idp - " + issuer + " !== " + idp
     );
   }
   sessionStorage.setItem("idp", issuer);
@@ -61,8 +61,12 @@ const redirectForLogin = async (idp: string, redirect_uri: string, client_detail
           return response.json();
         });
     client_id = client_registration["client_id"] as string;
-    // remember client_id
-    sessionStorage.setItem("client_id", client_id!);
+  }
+  // remember client_id if not URL
+  try {
+    new URL(client_id)
+  } catch {
+    sessionStorage.setItem("client_id", client_id);
   }
 
   // RFC 7636 PKCE, remember code verifer
@@ -115,7 +119,7 @@ const getPKCEcode = async () => {
  * URL contains authrization code, issuer (idp) and state (csrf token),
  * get an access token for the authrization code.
  */
-const onIncomingRedirect = async (client_details?: ClientDetails) => {
+const onIncomingRedirect = async (client_details?: ClientDetails, database?: SessionDatabase) => {
   const url = new URL(window.location.href);
   // authorization code
   const authorization_code = url.searchParams.get("code");
@@ -125,15 +129,15 @@ const onIncomingRedirect = async (client_details?: ClientDetails) => {
   }
   // RFC 9207 issuer check
   const idp = sessionStorage.getItem("idp");
-  if (idp === null || url.searchParams.get("iss") != idp) {
+  if (idp === null || url.searchParams.get("iss") !== idp) {
     throw new Error(
-      "RFC 9207 - iss != idp - " + url.searchParams.get("iss") + " != " + idp
+      "RFC 9207 - iss !== idp - " + url.searchParams.get("iss") + " !== " + idp
     );
   }
   // RFC 6749 OAuth 2.0
-  if (url.searchParams.get("state") != sessionStorage.getItem("csrf_token")) {
+  if (url.searchParams.get("state") !== sessionStorage.getItem("csrf_token")) {
     throw new Error(
-      "RFC 6749 - state != csrf_token - " + url.searchParams.get("state") + " != " + sessionStorage.getItem("csrf_token")
+      "RFC 6749 - state !== csrf_token - " + url.searchParams.get("state") + " !== " + sessionStorage.getItem("csrf_token")
     );
   }
   // remove redirect query parameters from URL
@@ -197,35 +201,37 @@ const onIncomingRedirect = async (client_details?: ClientDetails) => {
   });
   // check dpop thumbprint
   const dpopThumbprint = await calculateJwkThumbprint(await exportJWK(key_pair.publicKey))
-  if ((payload["cnf"] as any)["jkt"] != dpopThumbprint) {
+  if ((payload["cnf"] as any)["jkt"] !== dpopThumbprint) {
     throw new Error(
-      "Access Token validation failed on `jkt`: jkt != DPoP thumbprint - " + (payload["cnf"] as any)["jkt"] + " != " + dpopThumbprint
+      "Access Token validation failed on `jkt`: jkt !== DPoP thumbprint - " + (payload["cnf"] as any)["jkt"] + " !== " + dpopThumbprint
     );
   }
   // check client_id
-  if (payload["client_id"] != client_id) {
+  if (payload["client_id"] !== client_id) {
     throw new Error(
-      "Access Token validation failed on `client_id`: JWT payload != client_id - " + payload["client_id"] + " != " + client_id
+      "Access Token validation failed on `client_id`: JWT payload !== client_id - " + payload["client_id"] + " !== " + client_id
     );
   }
 
   // summarise session info
   const token_details = { ...token_response, dpop_key_pair: key_pair } as TokenDetails;
   const idp_details = { idp, jwks_uri, token_endpoint } as IdentityProviderDetails
-  if (!client_details) client_details = { redirect_uris: [window.location.href] };
+  if (!client_details) client_details = { redirect_uris: [url.toString()] };
   client_details.client_id = client_id;
 
-  // to remember for session restore
-  const sessionDatabase = await new SessionDatabase().init();
-  await Promise.all([
-    sessionDatabase.setItem("idp", idp),
-    sessionDatabase.setItem("jwks_uri", jwks_uri),
-    sessionDatabase.setItem("token_endpoint", token_endpoint),
-    sessionDatabase.setItem("client_id", client_id),
-    sessionDatabase.setItem("dpop_keypair", key_pair),
-    sessionDatabase.setItem("refresh_token", token_response["refresh_token"])
-  ]);
-  sessionDatabase.close();
+  // and persist refresh token details
+  if (database) {
+    await database.init();
+    await Promise.all([
+      database.setItem("idp", idp),
+      database.setItem("jwks_uri", jwks_uri),
+      database.setItem("token_endpoint", token_endpoint),
+      database.setItem("client_id", client_id),
+      database.setItem("dpop_keypair", key_pair),
+      database.setItem("refresh_token", token_response["refresh_token"])
+    ]);
+    database.close();
+  }
 
   // clean session storage
   sessionStorage.removeItem("csrf_token");
@@ -240,7 +246,7 @@ const onIncomingRedirect = async (client_details?: ClientDetails) => {
     clientDetails: client_details,
     idpDetails: idp_details,
     tokenDetails: token_details
-  } as SessionInformation;
+  } as SessionInformation
 };
 
 

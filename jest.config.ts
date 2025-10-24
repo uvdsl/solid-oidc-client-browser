@@ -4,7 +4,7 @@ module.exports = {
   extensionsToTreatAsEsm: ['.ts'],
   verbose: false,
   setupFilesAfterEnv: ['<rootDir>/jest-setup.ts'],
-  testMatch: ['<rootDir>/spec/**/?(*.)+(spec|test).ts'],
+  testMatch: ['<rootDir>/tests/**/?(*.)+(spec|test).ts'],
   collectCoverage: true,
   coveragePathIgnorePatterns: [
     '/node_modules/',
