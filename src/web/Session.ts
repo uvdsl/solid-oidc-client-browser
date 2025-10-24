@@ -1,14 +1,16 @@
 import { DereferencableIdClientDetails, DynamicRegistrationClientDetails } from '../core';
 import { Session, SessionOptions, SessionCore } from '../core/Session';
+import { TokenDetails } from '../core/SessionInformation';
 import { RefreshMessageTypes } from './RefreshWorker';
 import { SessionIDB } from './SessionDatabase';
 
 // Any provided database via SessionOptions will be ignored.
 // Database will be an IndexedDB.
 export interface WebWorkerSessionOptions extends SessionOptions {
-    workerUrl?: string | URL;
+    onSessionStateChange?: () => void;
     onSessionExpirationWarning?: () => void;
     onSessionExpiration?: () => void;
+    workerUrl?: string | URL;
 }
 
 /**
@@ -17,6 +19,7 @@ export interface WebWorkerSessionOptions extends SessionOptions {
 export class WebWorkerSession extends SessionCore {
     private worker: SharedWorker;
 
+    private onSessionStateChange?: () => void;
     private onSessionExpirationWarning?: () => void;
     private onSessionExpiration?: () => void;
 
@@ -31,6 +34,7 @@ export class WebWorkerSession extends SessionCore {
         const database = new SessionIDB();
         const options = { ...sessionOptions, database };
         super(clientDetails, options);
+        this.onSessionStateChange = sessionOptions?.onSessionStateChange;
         this.onSessionExpirationWarning = sessionOptions?.onSessionExpirationWarning;
         this.onSessionExpiration = sessionOptions?.onSessionExpiration;
 
@@ -98,6 +102,7 @@ export class WebWorkerSession extends SessionCore {
     async logout() {
         this.worker.port.postMessage({ type: RefreshMessageTypes.STOP });
         await super.logout();
+        this.onSessionStateChange?.();
     }
 
     async authFetch(input: string | URL | Request, init?: RequestInit, dpopPayload?: any) {
@@ -115,6 +120,12 @@ export class WebWorkerSession extends SessionCore {
         }
         return super.authFetch(input, init, dpopPayload);
     }
+
+      async setTokenDetails(tokenDetails: TokenDetails) {
+        await super.setTokenDetails(tokenDetails);
+        this.onSessionStateChange?.();
+      }
+    
 
     private clearRefreshPromise() {
         this.refreshPromise = undefined;

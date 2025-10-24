@@ -96,8 +96,9 @@ export class SessionCore implements Session {
     // no session - we remain unauthenticated
     if (!newSessionInfo.tokenDetails) return;
     // we got a session
-    this.information = newSessionInfo;
-    await this._updateSessionDetailsFromToken(this.information.tokenDetails?.access_token);
+    this.information.clientDetails = newSessionInfo.clientDetails
+    this.information.idpDetails = newSessionInfo.idpDetails;
+    await this.setTokenDetails(newSessionInfo.tokenDetails)
   }
 
   /**
