@@ -113,9 +113,8 @@ export class WebWorkerSession extends SessionCore {
                 } else {
                     await this.refreshPromise; // Wait for already pending
                 }
-            } catch (refreshError) {
-                console.error("Session refresh failed during authFetch:", refreshError);
-                throw new Error("Session expired and could not be refreshed.");
+            } catch (refreshError:any) {
+                throw new Error("Session refresh failed during authFetch:", refreshError.message);
             }
         }
         return super.authFetch(input, init, dpopPayload);
