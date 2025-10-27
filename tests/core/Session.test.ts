@@ -74,6 +74,8 @@ describe('SessionCore', () => {
         (jose.decodeJwt as jest.Mock).mockClear(); // This is also called by _updateSessionDetailsFromToken
     };
 
+    const flushPromises = () => new Promise(resolve => setTimeout(resolve, 0));
+
 
     beforeEach(() => {
         // Restore all spies and mocks defined with jest.spyOn or jest.fn()
@@ -214,6 +216,29 @@ describe('SessionCore', () => {
             expect(session.webId).toBeUndefined();
             expect(setTokenDetailsSpy).not.toHaveBeenCalled();
         });
+
+        it('should reuse existing refresh promise if called multiple times', async () => {
+            (RefreshGrant.renewTokens as jest.Mock).mockResolvedValueOnce(mockTokenDetails);
+            const session = createSession();
+
+            const promise1 = session.restore();
+            const promise2 = session.restore();
+            const promise3 = session.restore();
+
+            await Promise.all([promise1, promise2, promise3]);
+
+            expect(RefreshGrant.renewTokens).toHaveBeenCalledTimes(1);
+        });
+
+        it('should reject with error if renewTokens fails while session is active', async () => {
+            const session = createSession();
+            await activateSession(session);
+
+            (RefreshGrant.renewTokens as jest.Mock).mockRejectedValueOnce(new Error('Token refresh failed'));
+
+            await expect(session.restore()).rejects.toThrow('Token refresh failed');
+            expect(session.isActive).toBe(true); // Session should remain active
+        });
     });
 
     // --- Logout Tests ---
@@ -283,6 +308,20 @@ describe('SessionCore', () => {
             await session.logout();
 
             expect((session as any).information.clientDetails.client_id).toBe('not-a-uri');
+        });
+
+        it('should reject refresh promise if logout is called during token refresh', async () => {
+            const session = createSession();
+
+            let resolveRenew: any;
+            (RefreshGrant.renewTokens as jest.Mock).mockReturnValueOnce(
+                new Promise(resolve => { resolveRenew = resolve; })
+            );
+
+            const restorePromise = session.restore();
+            await session.logout();
+
+            await expect(restorePromise).rejects.toThrow('Logout during token refresh.');
         });
     });
 
@@ -371,6 +410,103 @@ describe('SessionCore', () => {
             expect(requestArg.headers.get('X-Req')).toBe('req-val');
             expect(requestArg.headers.get('authorization')).toBe(`DPoP ${mockTokenDetails.access_token}`);
             expect(requestArg.headers.get('dpop')).toBe('mocked.dpop.token');
+        });
+
+        it('should renew tokens if expired before making request', async () => {
+            const session = createSession();
+            await activateSession(session);
+
+            // Make token expired
+            const pastExp = Math.floor(Date.now() / 1000) - 100;
+            (session as any).exp_ = pastExp;
+
+            (RefreshGrant.renewTokens as jest.Mock).mockResolvedValueOnce(mockTokenDetails);
+
+            await session.authFetch('https://resource.example/data');
+
+            expect(RefreshGrant.renewTokens).toHaveBeenCalledTimes(1);
+            expect(fetch).toHaveBeenCalledTimes(1);
+        });
+
+        it('should wait for pending refresh before making request', async () => {
+            const session = createSession();
+            await activateSession(session);
+
+            // Make token expired
+            (session as any).exp_ = Math.floor(Date.now() / 1000) - 100;
+
+            let resolveRenew: any;
+            (RefreshGrant.renewTokens as jest.Mock).mockReturnValueOnce(
+                new Promise(resolve => {
+                    resolveRenew = () => resolve(mockTokenDetails);
+                })
+            );
+
+            const fetchPromise = session.authFetch('https://resource.example/data');
+
+            // Verify restore was called but fetch hasn't completed yet
+            expect(RefreshGrant.renewTokens).toHaveBeenCalled();
+            expect(fetch).not.toHaveBeenCalled();
+
+            resolveRenew();
+            await fetchPromise;
+
+            expect(fetch).toHaveBeenCalledTimes(1);
+        });
+
+        it('should wait for pending refresh for multiple requests', async () => {
+            const session = createSession();
+            await activateSession(session);
+
+            // Make token expired
+            (session as any).exp_ = Math.floor(Date.now() / 1000) - 100;
+
+            let resolveRenew: any;
+            (RefreshGrant.renewTokens as jest.Mock).mockReturnValueOnce(
+                new Promise(resolve => {
+                    resolveRenew = () => resolve(mockTokenDetails);
+                })
+            );
+
+            const fetchPromise1 = session.authFetch('https://resource.example/data1');
+            const fetchPromise2 = session.authFetch('https://resource.example/data2');
+
+            // Verify restore was called but fetch hasn't completed yet
+            expect(RefreshGrant.renewTokens).toHaveBeenCalled();
+            expect(fetch).not.toHaveBeenCalled();
+
+            resolveRenew();
+            await Promise.all([fetchPromise1, fetchPromise2]);
+
+            expect(fetch).toHaveBeenCalledTimes(2);
+        });
+
+        it('should use custom dpopPayload when provided', async () => {
+            const session = createSession();
+            await activateSession(session);
+
+            const customPayload = { htu: 'custom-uri', htm: 'CUSTOM', custom: 'value' };
+
+            await session.authFetch('https://resource.example/data', {}, customPayload);
+
+            expect(jose.SignJWT).toHaveBeenCalled();
+
+            // Verify the payload passed to SignJWT includes custom fields
+            const payload = (jose.SignJWT as jest.Mock).mock.calls[0][0];
+            expect(payload).toMatchObject(customPayload);
+            expect(payload.ath).toBe('mock-ath-value');
+        });
+
+        it('should handle URL object as input', async () => {
+            const session = createSession();
+            await activateSession(session);
+
+            const url = new URL('https://resource.example/data');
+            await session.authFetch(url);
+
+            expect(fetch).toHaveBeenCalledTimes(1);
+            const [fetchUrl] = (fetch as jest.Mock).mock.calls[0];
+            expect(fetchUrl).toBeInstanceOf(URL);
         });
 
     });
@@ -469,6 +605,128 @@ describe('SessionCore', () => {
             await (session as any)._updateSessionDetailsFromToken('some-token');
 
             expect(logoutSpy).toHaveBeenCalledTimes(1);
+        });
+
+        it('should call logout when exp claim is missing', async () => {
+            const session = createSession();
+            const logoutSpy = jest.spyOn(session, 'logout').mockResolvedValue(undefined);
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({
+                webid: 'https://alice.example/card#me'
+                // No exp
+            });
+
+            await (session as any)._updateSessionDetailsFromToken('some-token');
+
+            expect(logoutSpy).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('onSessionStateChange callback', () => {
+        it('should call onSessionStateChange when login succeeds', async () => {
+            const callback = jest.fn();
+            const session = createSession(mockClientDetails, {
+                database: mockDb,
+                onSessionStateChange: callback
+            });
+
+            (AuthCodeGrant.onIncomingRedirect as jest.Mock).mockResolvedValueOnce(mockSessionInfo);
+            await session.handleRedirectFromLogin();
+
+            expect(callback).toHaveBeenCalledTimes(1);
+        });
+
+        it('should call onSessionStateChange when restore succeeds', async () => {
+            const callback = jest.fn();
+            const session = createSession(mockClientDetails, {
+                database: mockDb,
+                onSessionStateChange: callback
+            });
+            expect(session.isActive).toBe(false);
+
+            (RefreshGrant.renewTokens as jest.Mock).mockResolvedValueOnce(mockTokenDetails);
+            await session.restore();
+            await flushPromises();
+
+            expect(session.isActive).toBe(true);
+
+            expect(callback).toHaveBeenCalledTimes(1);
+        });
+
+        it('should NOT call onSessionStateChange when restore succeeds but state does not change', async () => {
+            const callback = jest.fn();
+            const session = createSession(mockClientDetails, {
+                database: mockDb,
+                onSessionStateChange: callback
+            });
+            await activateSession(session);
+            expect(session.isActive).toBe(true); // Session is already active
+
+            (RefreshGrant.renewTokens as jest.Mock).mockResolvedValueOnce(mockTokenDetails);
+
+            await session.restore();
+
+            // State didn't change (was active, still active)
+            expect(session.isActive).toBe(true);
+            // Callback should NOT be called
+            expect(callback).not.toHaveBeenCalled();
+        });
+
+        it('should call onSessionStateChange on logout', async () => {
+            const callback = jest.fn();
+            const session = createSession(mockClientDetails, {
+                database: mockDb,
+                onSessionStateChange: callback
+            });
+            await activateSession(session);
+            callback.mockClear();
+
+            await session.logout();
+
+            expect(callback).toHaveBeenCalledTimes(1);
+        });
+
+        it('should not call onSessionStateChange if restore fails and session was not active', async () => {
+            const callback = jest.fn();
+            const session = createSession(mockClientDetails, {
+                database: mockDb,
+                onSessionStateChange: callback
+            });
+
+            (RefreshGrant.renewTokens as jest.Mock).mockRejectedValueOnce(new Error('Refresh failed'));
+            await expect(session.restore()).rejects.toThrow();
+
+            expect(callback).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('isExpired', () => {
+        it('should return true when no exp is set', () => {
+            const session = createSession();
+            expect(session.isExpired()).toBe(true);
+        });
+
+        it('should return true when token is expired', async () => {
+            const session = createSession();
+            const pastExp = Math.floor(Date.now() / 1000) - 100;
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({
+                webid: 'https://alice.example/card#me',
+                exp: pastExp
+            });
+
+            await (session as any).setTokenDetails(mockTokenDetails);
+            expect(session.isExpired()).toBe(true);
+        });
+
+        it('should return false when token is not expired', async () => {
+            const session = createSession();
+            const futureExp = Math.floor(Date.now() / 1000) + 3600;
+            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({
+                webid: 'https://alice.example/card#me',
+                exp: futureExp
+            });
+
+            await (session as any).setTokenDetails(mockTokenDetails);
+            expect(session.isExpired()).toBe(false);
         });
     });
 });

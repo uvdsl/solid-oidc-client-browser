@@ -134,8 +134,8 @@ export class SessionCore implements Session {
     // Restore session using Refresh Token Grant 
     const wasActive = this.isActive
     renewTokens(this.database)
-      .then(tokenDetails => { return this.setTokenDetails(tokenDetails); })
-      .then(() => { this.resolveRefresh!(); })
+      .then(tokenDetails => this.setTokenDetails(tokenDetails))
+      .then(() => this.resolveRefresh!())
       .catch(error => {
         if (this.isActive) {
           this.rejectRefresh!(new Error(error || 'Token refresh failed'));
