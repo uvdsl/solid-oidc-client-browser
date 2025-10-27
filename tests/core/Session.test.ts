@@ -92,7 +92,7 @@ describe('SessionCore', () => {
         };
 
         // Mock jose decodeJwt used in _updateSessionDetailsFromToken
-        (jose.decodeJwt as jest.Mock).mockReturnValue({ webid: 'https://alice.example/card#me' });
+        (jose.decodeJwt as jest.Mock).mockReturnValue({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
         // Mock jose exportJWK needed for _createSignedDPoPToken
         (jose.exportJWK as jest.Mock).mockResolvedValue({ kty: 'EC' });
         // Mock _computeAth dependency (mocking crypto directly is complex)
@@ -145,7 +145,6 @@ describe('SessionCore', () => {
         it('should call onIncomingRedirect and update state on success', async () => {
             // Arrange
             (AuthCodeGrant.onIncomingRedirect as jest.Mock).mockResolvedValueOnce(mockSessionInfo);
-            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
             const session = createSession();
 
             // Act
@@ -187,7 +186,6 @@ describe('SessionCore', () => {
         it('should call renewTokens and update state on success', async () => {
             // Arrange
             (RefreshGrant.renewTokens as jest.Mock).mockResolvedValueOnce(mockTokenDetails);
-            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
             const session = createSession();
 
             // Act
@@ -205,10 +203,10 @@ describe('SessionCore', () => {
             // Arrange
             (RefreshGrant.renewTokens as jest.Mock).mockRejectedValueOnce(new Error('Refresh failed'));
             const session = createSession();
-            const setTokenDetailsSpy = jest.spyOn(session, 'setTokenDetails');
+            const setTokenDetailsSpy = jest.spyOn(session as any, 'setTokenDetails');
 
             // Act
-            await session.restore(); // Should catch the error
+            await expect(session.restore()).rejects.toThrow('No session to restore.');
 
             // Assert
             expect(RefreshGrant.renewTokens).toHaveBeenCalledTimes(1);
@@ -251,7 +249,6 @@ describe('SessionCore', () => {
 
         it('should clear the database if provided', async () => {
             const session = createSession(mockClientDetails, { database: mockDb });
-            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
             await activateSession(session); // Ensure session is active
 
             await session.logout();
@@ -296,7 +293,6 @@ describe('SessionCore', () => {
         it('should add Authorization and DPoP headers when session is active', async () => {
             // Arrange
             const session = createSession();
-            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
             await activateSession(session);
 
             // Act
@@ -314,11 +310,10 @@ describe('SessionCore', () => {
         it('should NOT add Authorization headers when session is inactive', async () => {
             // Arrange
             const session = createSession();
-            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
             // No activateSession call needed, starts inactive
 
             // Act
-            await session.authFetch(testUrl);
+            await session.authFetch(testUrl, { headers: new Headers() });
 
             // Assert
             expect(fetch).toHaveBeenCalledTimes(1);
@@ -332,7 +327,6 @@ describe('SessionCore', () => {
         it('should pass through init options correctly, preserving custom headers', async () => {
             // Arrange
             const session = createSession();
-            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
             await activateSession(session);
             const initOptions = {
                 method: 'POST',
@@ -385,9 +379,8 @@ describe('SessionCore', () => {
     describe('setTokenDetails', () => {
         it('should update internal token details', () => {
             const session = createSession();
-            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
 
-            session.setTokenDetails(mockTokenDetails);
+            (session as any).setTokenDetails(mockTokenDetails);
             expect((session as any).information.tokenDetails).toEqual(mockTokenDetails);
         });
 
@@ -396,14 +389,13 @@ describe('SessionCore', () => {
             const session = createSession();
 
             // Mock the dependencies of the private method that setTokenDetails calls
-            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
 
             // Spy on the internal _computeAth method to mock its implementation
             const computeAthSpy = jest.spyOn(session as any, '_computeAth')
                 .mockResolvedValueOnce('mock-ath-value');
 
             // Act
-            await session.setTokenDetails(mockTokenDetails);
+            await (session as any).setTokenDetails(mockTokenDetails);
 
             // Assert
             // Check that the state was set correctly
@@ -420,20 +412,17 @@ describe('SessionCore', () => {
     describe('getExpiresIn', () => {
         it('should calculate remaining time correctly (returns seconds)', () => {
             const session = createSession();
-            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
-            session.setTokenDetails({ ...mockTokenDetails, expires_in: 900 });
+            (session as any).setTokenDetails({ ...mockTokenDetails, expires_in: 900 });
             expect(session.getExpiresIn()).toBe(900);
         });
 
         it('should return a negative value if expires_in is missing or invalid', () => {
             const session = createSession();
 
-            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
-            session.setTokenDetails({ ...mockTokenDetails, expires_in: undefined } as any);
+            (session as any).setTokenDetails({ ...mockTokenDetails, expires_in: undefined } as any);
             expect(session.getExpiresIn()).toBeLessThan(0);
 
-            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
-            session.setTokenDetails({ ...mockTokenDetails, expires_in: null } as any);
+            (session as any).setTokenDetails({ ...mockTokenDetails, expires_in: null } as any);
             expect(session.getExpiresIn()).toBeLessThan(0);
         });
     });
@@ -442,7 +431,6 @@ describe('SessionCore', () => {
     describe('_updateSessionDetailsFromToken (private method test)', () => {
         it('should set isActive, webId, and currentAth when token is valid', async () => {
             const session = createSession();
-            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({ webid: 'https://alice.example/card#me', exp: Math.floor(Date.now() / 1000) + 3600 });
 
             await (session as any)._updateSessionDetailsFromToken(mockTokenDetails.access_token);
 

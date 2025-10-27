@@ -1,13 +1,11 @@
 import { DereferencableIdClientDetails, DynamicRegistrationClientDetails } from '../core';
-import { Session, SessionOptions, SessionCore } from '../core/Session';
-import { TokenDetails } from '../core/SessionInformation';
+import { SessionOptions, SessionCore } from '../core/Session';
 import { RefreshMessageTypes } from './RefreshWorker';
 import { SessionIDB } from './SessionDatabase';
 
 // Any provided database via SessionOptions will be ignored.
 // Database will be an IndexedDB.
 export interface WebWorkerSessionOptions extends SessionOptions {
-    onSessionStateChange?: () => void;
     onSessionExpirationWarning?: () => void;
     onSessionExpiration?: () => void;
     workerUrl?: string | URL;
@@ -19,13 +17,8 @@ export interface WebWorkerSessionOptions extends SessionOptions {
 export class WebWorkerSession extends SessionCore {
     private worker: SharedWorker;
 
-    private onSessionStateChange?: () => void;
     private onSessionExpirationWarning?: () => void;
     private onSessionExpiration?: () => void;
-
-    private refreshPromise?: Promise<void>;
-    private resolveRefresh?: (() => void);
-    private rejectRefresh?: ((reason?: any) => void);
 
     constructor(
         clientDetails?: DereferencableIdClientDetails | DynamicRegistrationClientDetails,
@@ -34,7 +27,6 @@ export class WebWorkerSession extends SessionCore {
         const database = new SessionIDB();
         const options = { ...sessionOptions, database };
         super(clientDetails, options);
-        this.onSessionStateChange = sessionOptions?.onSessionStateChange;
         this.onSessionExpirationWarning = sessionOptions?.onSessionExpirationWarning;
         this.onSessionExpiration = sessionOptions?.onSessionExpiration;
 
@@ -49,11 +41,13 @@ export class WebWorkerSession extends SessionCore {
         });
     }
 
-    private handleWorkerMessage = async (data: any) => {
+    private async handleWorkerMessage(data: any) {
         const { type, payload, error } = data;
         switch (type) {
             case RefreshMessageTypes.TOKEN_DETAILS:
+                const wasActive = this.isActive;
                 await this.setTokenDetails(payload.tokenDetails);
+                if (wasActive !== this.isActive) this.onSessionStateChange?.();
                 if (this.refreshPromise && this.resolveRefresh) {
                     this.resolveRefresh();
                     this.clearRefreshPromise();
@@ -91,45 +85,17 @@ export class WebWorkerSession extends SessionCore {
     }
 
     async restore() {
-        this.worker.port.postMessage({ type: RefreshMessageTypes.REFRESH });
         this.refreshPromise = new Promise((resolve, reject) => {
             this.resolveRefresh = resolve;
             this.rejectRefresh = reject;
         });
+        this.worker.port.postMessage({ type: RefreshMessageTypes.REFRESH });
         return this.refreshPromise;
     }
 
     async logout() {
         this.worker.port.postMessage({ type: RefreshMessageTypes.STOP });
         await super.logout();
-        this.onSessionStateChange?.();
-    }
-
-    async authFetch(input: string | URL | Request, init?: RequestInit, dpopPayload?: any) {
-        if (this.isExpired()) {
-            try {
-                if (!this.refreshPromise) {
-                    await this.restore(); // Initiate and wait
-                } else {
-                    await this.refreshPromise; // Wait for already pending
-                }
-            } catch (refreshError:any) {
-                throw new Error("Session refresh failed during authFetch:", refreshError.message);
-            }
-        }
-        return super.authFetch(input, init, dpopPayload);
-    }
-
-      async setTokenDetails(tokenDetails: TokenDetails) {
-        await super.setTokenDetails(tokenDetails);
-        this.onSessionStateChange?.();
-      }
-    
-
-    private clearRefreshPromise() {
-        this.refreshPromise = undefined;
-        this.resolveRefresh = undefined;
-        this.rejectRefresh = undefined;
     }
 
 }

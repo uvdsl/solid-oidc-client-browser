@@ -7,6 +7,7 @@ import { DynamicRegistrationClientDetails, DereferencableIdClientDetails, Sessio
 
 export interface SessionOptions {
   database?: SessionDatabase
+  onSessionStateChange?: () => void;
 }
 
 /**
@@ -72,12 +73,19 @@ export class SessionCore implements Session {
   private webId_?: string = undefined;
   private currentAth_?: string = undefined;
 
+  protected onSessionStateChange?: () => void;
+
   private information: SessionInformation;
   private database?: SessionDatabase;
+
+  protected refreshPromise?: Promise<void>;
+  protected resolveRefresh?: (() => void);
+  protected rejectRefresh?: ((reason?: any) => void);
 
   constructor(clientDetails?: DereferencableIdClientDetails | DynamicRegistrationClientDetails, sessionOptions?: SessionOptions) {
     this.information = { clientDetails } as SessionInformation;
     this.database = sessionOptions?.database
+    this.onSessionStateChange = sessionOptions?.onSessionStateChange;
   }
 
   async login(idp: string, redirect_uri: string) {
@@ -99,6 +107,8 @@ export class SessionCore implements Session {
     this.information.clientDetails = newSessionInfo.clientDetails
     this.information.idpDetails = newSessionInfo.idpDetails;
     await this.setTokenDetails(newSessionInfo.tokenDetails)
+    // callback state change 
+    this.onSessionStateChange?.(); // we logged in
   }
 
   /**
@@ -112,14 +122,33 @@ export class SessionCore implements Session {
       )
     }
 
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    this.refreshPromise = new Promise((resolve, reject) => {
+      this.resolveRefresh = resolve;
+      this.rejectRefresh = reject;
+    });
+
     // Restore session using Refresh Token Grant 
-    await renewTokens(this.database)
-      .then(tokenDetails => {
-        // got new tokens
-        return this.setTokenDetails(tokenDetails);
+    const wasActive = this.isActive
+    renewTokens(this.database)
+      .then(tokenDetails => { return this.setTokenDetails(tokenDetails); })
+      .then(() => { this.resolveRefresh!(); })
+      .catch(error => {
+        if (this.isActive) {
+          this.rejectRefresh!(new Error(error || 'Token refresh failed'));
+          // do not change state (yet), let the app decide if they want to logout or if they just want to retry.
+        } else {
+          this.rejectRefresh!(new Error("No session to restore."));
+        }
+      }).finally(() => {
+        this.clearRefreshPromise();
+        if (wasActive !== this.isActive) this.onSessionStateChange?.();
       })
-      // anything missing or wrong => abort, could not restore session.
-      .catch(_ => { }); // fail silently
+
+    return this.refreshPromise;
   }
 
   /**
@@ -136,12 +165,18 @@ export class SessionCore implements Session {
     this.information.idpDetails = undefined;
     this.information.tokenDetails = undefined;
     // client details are preserved
+    if (this.refreshPromise && this.rejectRefresh) {
+      this.rejectRefresh(new Error('Logout during token refresh.'));
+      this.clearRefreshPromise();
+    }
     // clean session database
     if (this.database) {
       await this.database.init();
       await this.database.clear();
       this.database.close();
     }
+    // callback state change
+    this.onSessionStateChange?.(); // we logged out
   }
 
   /**
@@ -154,11 +189,22 @@ export class SessionCore implements Session {
    * @returns A promise that resolves to the fetch Response.
    */
   async authFetch(input: string | URL | globalThis.Request, init?: RequestInit, dpopPayload?: any) {
+
+    // if there is not session established, just delegate to the default fetch
+    if (!this.isActive) {
+      return fetch(input, init);
+    }
+
+    // TODO
+    // TODO do HEAD request to check if authentication is actually required, only then include tokens
+    // TODO
+
     // prepare authenticated call using a DPoP token (either provided payload, or default)
+
     let url: URL;
     let method: string;
     let headers: Headers;
-
+    // wrangle fetch input parameters into place
     if (input instanceof Request) {
       url = new URL(input.url);
       method = init?.method || input?.method || 'GET';
@@ -171,15 +217,15 @@ export class SessionCore implements Session {
     }
 
     // create DPoP token, and add tokens to request
-    if (this.information.tokenDetails) { // TODO tie to expiration?
-      dpopPayload = dpopPayload ?? {
-        htu: `${url.origin}${url.pathname}`,
-        htm: method.toUpperCase()
-      };
-      const dpop = await this._createSignedDPoPToken(dpopPayload);
-      headers.set("dpop", dpop);
-      headers.set("authorization", `DPoP ${this.information.tokenDetails.access_token}`);
-    }
+    await this._renewTokensIfExpired();
+    dpopPayload = dpopPayload ?? {
+      htu: `${url.origin}${url.pathname}`,
+      htm: method.toUpperCase()
+    };
+    const dpop = await this._createSignedDPoPToken(dpopPayload);
+    // overwrite headers: authorization, dpop
+    headers.set("dpop", dpop);
+    headers.set("authorization", `DPoP ${this.information.tokenDetails!.access_token}`);
 
     // check explicitly; to avoid unexpected behaviour
     if (input instanceof Request) { // clone the provided request, and override the headers
@@ -189,14 +235,61 @@ export class SessionCore implements Session {
     return fetch(url, { ...init, headers });
   }
 
+  // 
+  // Setters
   //
-  // Helper Methods
+
+  protected async setTokenDetails(tokenDetails: TokenDetails) {
+    this.information.tokenDetails = tokenDetails;
+    await this._updateSessionDetailsFromToken(tokenDetails.access_token)
+  }
+
+  protected clearRefreshPromise() {
+    this.refreshPromise = undefined;
+    this.resolveRefresh = undefined;
+    this.rejectRefresh = undefined;
+  }
+
+
+  //
+  // Getters
+  //
+
+  get isActive() {
+    return this.isActive_;
+  }
+
+  get webId() {
+    return this.webId_;
+  }
+
+  getExpiresIn() {
+    return this.information.tokenDetails!.expires_in ?? -1;
+  }
+
+  isExpired() {
+    if (!this.exp_) return true;
+    return this._isTokenExpired(this.exp_);
+  }
+
+
+  //
+  // Helpers
   //
 
   /**
-   * Set the session to active if there is an access token.
+   * Check if the current token is expired (which may happen during device/browser/tab hibernation),
+   * and if expired, restore the session.
    */
-
+  private async _renewTokensIfExpired(): Promise<void> {
+    if (this.isExpired()) {
+      if (!this.refreshPromise) {
+        await this.restore(); // Initiate and wait
+      } else {
+        await this.refreshPromise; // Wait for already pending
+      }
+    }
+  }
 
   /**
    * RFC 9449 - Hash of the access token
@@ -218,13 +311,14 @@ export class SessionCore implements Session {
     return base64url;
   }
 
+
   /**
- * Creates a signed DPoP (Demonstration of Proof-of-Possession) token.
- *
- * @param payload The payload to include in the DPoP token. By default, it includes `htu` (HTTP target URI) and `htm` (HTTP method).
- * @returns A promise that resolves to the signed DPoP token string.
- * @throws Error if the session has not been initialized - if no token details are available.
- */
+   * Creates a signed DPoP (Demonstration of Proof-of-Possession) token.
+   *
+   * @param payload The payload to include in the DPoP token. By default, it includes `htu` (HTTP target URI) and `htm` (HTTP method).
+   * @returns A promise that resolves to the signed DPoP token string.
+   * @throws Error if the session has not been initialized - if no token details are available.
+   */
   private async _createSignedDPoPToken(payload: any) {
     if (!this.information.tokenDetails || !this.currentAth_) {
       throw new Error("Session not established.");
@@ -243,7 +337,6 @@ export class SessionCore implements Session {
       })
       .sign(this.information.tokenDetails.dpop_key_pair.privateKey);
   }
-
 
   private async _updateSessionDetailsFromToken(access_token?: string) {
     if (!access_token) {
@@ -279,32 +372,4 @@ export class SessionCore implements Session {
     const currentTimeSeconds = Math.floor(Date.now() / 1000);
     return exp < (currentTimeSeconds + bufferSeconds);
   }
-
-
-  //
-  // Getters
-  //
-
-  get isActive() {
-    return this.isActive_;
-  }
-
-  get webId() {
-    return this.webId_;
-  }
-
-  async setTokenDetails(tokenDetails: TokenDetails) {
-    this.information.tokenDetails = tokenDetails;
-    await this._updateSessionDetailsFromToken(tokenDetails.access_token)
-  }
-
-  getExpiresIn() {
-    return this.information.tokenDetails!.expires_in ?? -1;
-  }
-
-  isExpired() {
-    if (!this.exp_) return true;
-    return this._isTokenExpired(this.exp_);
-  }
-
 }
