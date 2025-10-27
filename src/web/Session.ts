@@ -1,5 +1,6 @@
 import { DereferencableIdClientDetails, DynamicRegistrationClientDetails } from '../core';
 import { SessionOptions, SessionCore } from '../core/Session';
+import { getMetaUrl } from './RefreshWorkerUrl';
 import { RefreshMessageTypes } from './RefreshWorker';
 import { SessionIDB } from './SessionDatabase';
 
@@ -31,7 +32,7 @@ export class WebWorkerSession extends SessionCore {
         this.onSessionExpiration = sessionOptions?.onSessionExpiration;
 
         // Allow consumer to provide worker URL, or use default
-        const workerUrl = sessionOptions?.workerUrl ?? new URL('./RefreshWorker.js', import.meta.url);
+        const workerUrl = sessionOptions?.workerUrl ?? new URL('./RefreshWorker.js', getMetaUrl());
         this.worker = new SharedWorker(workerUrl, { type: 'module' });
         this.worker.port.onmessage = (event) => {
             this.handleWorkerMessage(event.data).catch(console.error);
@@ -47,7 +48,8 @@ export class WebWorkerSession extends SessionCore {
             case RefreshMessageTypes.TOKEN_DETAILS:
                 const wasActive = this.isActive;
                 await this.setTokenDetails(payload.tokenDetails);
-                if (wasActive !== this.isActive) this.onSessionStateChange?.();
+                if (wasActive !== this.isActive)
+                    this.onSessionStateChange?.();
                 if (this.refreshPromise && this.resolveRefresh) {
                     this.resolveRefresh();
                     this.clearRefreshPromise();
@@ -66,8 +68,8 @@ export class WebWorkerSession extends SessionCore {
                 }
                 break;
             case RefreshMessageTypes.EXPIRED:
-                await this.logout();
                 this.onSessionExpiration?.();
+                await this.logout();
                 if (this.refreshPromise && this.rejectRefresh) {
                     this.rejectRefresh(new Error(error || 'Token refresh failed'));
                     this.clearRefreshPromise();
