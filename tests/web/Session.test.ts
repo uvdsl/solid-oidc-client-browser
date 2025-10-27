@@ -2,6 +2,7 @@ import { WebWorkerSession, WebWorkerSessionOptions } from '../../src/web/Session
 import { SessionCore } from '../../src/core/Session';
 import { RefreshMessageTypes } from '../../src/web/RefreshWorker';
 import { SessionIDB } from '../../src/web/SessionDatabase';
+import { TokenDetails } from '../../src/core/SessionInformation';
 
 // --- Mocks ---
 
@@ -24,6 +25,14 @@ global.SharedWorker = jest.fn().mockImplementation(() => ({
 })) as jest.Mock;
 
 const mockAddEventListener = jest.spyOn(window, 'addEventListener').mockImplementation(jest.fn());
+
+const mockTokenDetails: TokenDetails = {
+    access_token: 'mock-access-token',
+    refresh_token: 'mock-refresh-token',
+    expires_in: 3600,
+    dpop_key_pair: { publicKey: 'mockPublicKey', privateKey: 'mockPrivateKey' } as any, // Cast for simplicity
+    token_type: "mock-token-type"
+};
 
 // --- Tests ---
 
@@ -57,7 +66,8 @@ describe('WebWorkerSession', () => {
         jest.spyOn(SessionCore.prototype, 'handleRedirectFromLogin').mockResolvedValue(undefined);
         jest.spyOn(SessionCore.prototype, 'logout').mockResolvedValue(undefined);
         jest.spyOn(SessionCore.prototype as any, 'setTokenDetails').mockResolvedValue(undefined);
-        
+        jest.spyOn(SessionCore.prototype as any, 'getTokenDetails').mockReturnValue(mockTokenDetails);
+
         Object.defineProperty(SessionCore.prototype, 'isActive', {
             get: jest.fn(() => true),
             configurable: true,
@@ -139,7 +149,7 @@ describe('WebWorkerSession', () => {
 
             expect(mockSharedWorkerPort.postMessage).toHaveBeenCalledWith({
                 type: RefreshMessageTypes.SCHEDULE,
-                payload: { expiresIn: 3600 },
+                payload: mockTokenDetails,
             });
         });
 
@@ -171,11 +181,11 @@ describe('WebWorkerSession', () => {
 
         it('should post STOP before calling parent logout', async () => {
             const callOrder: string[] = [];
-            
+
             mockSharedWorkerPort.postMessage.mockImplementation(() => {
                 callOrder.push('STOP');
             });
-            
+
             (SessionCore.prototype.logout as jest.Mock).mockImplementation(async () => {
                 callOrder.push('logout');
             });
@@ -203,7 +213,7 @@ describe('WebWorkerSession', () => {
         it('should create new promise for each restore call', () => {
             const promise1 = session.restore();
             const promise2 = session.restore();
-            
+
             expect(promise1).not.toBe(promise2);
         });
     });
@@ -327,7 +337,7 @@ describe('WebWorkerSession', () => {
                 get: () => true,
                 configurable: true,
             });
-            
+
             const restorePromise = session.restore();
 
             await triggerWorkerMessage({
@@ -343,7 +353,7 @@ describe('WebWorkerSession', () => {
                 get: () => true,
                 configurable: true,
             });
-            
+
             const restorePromise = session.restore();
 
             await triggerWorkerMessage({
@@ -358,7 +368,7 @@ describe('WebWorkerSession', () => {
                 get: () => false,
                 configurable: true,
             });
-            
+
             const restorePromise = session.restore();
 
             await triggerWorkerMessage({
@@ -366,7 +376,7 @@ describe('WebWorkerSession', () => {
                 error: 'Some error',
             });
 
-            await expect(restorePromise).rejects.toThrow('No session to restore.');
+            await expect(restorePromise).rejects.toThrow('No session to restore');
         });
 
         it('should handle message when no restore promise exists', async () => {
@@ -427,11 +437,11 @@ describe('WebWorkerSession', () => {
 
         it('should call onSessionExpiration before logout', async () => {
             const callOrder: string[] = [];
-            
+
             mockOnSessionExpiration.mockImplementation(() => {
                 callOrder.push('onSessionExpiration');
             });
-            
+
             (SessionCore.prototype.logout as jest.Mock).mockImplementation(async () => {
                 callOrder.push('logout');
             });

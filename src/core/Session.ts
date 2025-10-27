@@ -272,6 +272,10 @@ export class SessionCore implements Session {
     return this._isTokenExpired(this.exp_);
   }
 
+  protected getTokenDetails() {
+    return this.information.tokenDetails;
+  }
+
 
   //
   // Helpers

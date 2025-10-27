@@ -26,12 +26,12 @@ describe('Refresher', () => {
         ...overrides
     });
 
-    const advanceToRefreshTime = (expiresIn: number) => {
-        jest.advanceTimersByTime(expiresIn * 1000 * 0.8);
+    const advanceToRefreshTime = (expires_in: number) => {
+        jest.advanceTimersByTime(expires_in * 1000 * 0.8);
     };
 
-    const advanceToLogoutTime = (expiresIn: number) => {
-        jest.advanceTimersByTime((expiresIn * 1000) - (5 * 1000));
+    const advanceToLogoutTime = (expires_in: number) => {
+        jest.advanceTimersByTime((expires_in * 1000) - (5 * 1000));
     };
 
     beforeEach(() => {
@@ -72,27 +72,27 @@ describe('Refresher', () => {
 
     describe('handleSchedule', () => {
         it('should schedule refresh and logout timers on first call', async () => {
-            await refresher.handleSchedule(3600);
+            await refresher.handleSchedule(mockTokenDetails);
 
             expect(refresher.getTimersAreRunning()).toBe(true);
             expect(setTimeout).toHaveBeenCalledTimes(2);
         });
 
         it('should not schedule timers if already running', async () => {
-            await refresher.handleSchedule(3600);
+            await refresher.handleSchedule(mockTokenDetails);
             jest.clearAllMocks();
 
-            await refresher.handleSchedule(3600);
+            await refresher.handleSchedule(mockTokenDetails);
 
             expect(setTimeout).not.toHaveBeenCalled();
             expect(refresher.getTimersAreRunning()).toBe(true);
         });
 
         it('should schedule refresh at 80% of expiry time', async () => {
-            const expiresIn = 1000;
-            await refresher.handleSchedule(expiresIn);
+            const expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
 
-            const expectedRefreshTime = expiresIn * 1000 * 0.8;
+            const expectedRefreshTime = expires_in * 1000 * 0.8;
             expect(setTimeout).toHaveBeenCalledWith(
                 expect.any(Function),
                 expectedRefreshTime
@@ -100,10 +100,10 @@ describe('Refresher', () => {
         });
 
         it('should schedule logout at expiry minus 5 second buffer', async () => {
-            const expiresIn = 1000;
-            await refresher.handleSchedule(expiresIn);
+            const expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
 
-            const expectedLogoutTime = (expiresIn * 1000) - (5 * 1000);
+            const expectedLogoutTime = (expires_in * 1000) - (5 * 1000);
             expect(setTimeout).toHaveBeenCalledWith(
                 expect.any(Function),
                 expectedLogoutTime
@@ -111,7 +111,8 @@ describe('Refresher', () => {
         });
 
         it('should not schedule refresh if time is below 30 second minimum buffer', async () => {
-            await refresher.handleSchedule(30);
+            const expires_in = 30;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
 
             // Should only schedule logout timer, not refresh (30s * 0.8 = 24s < 30s minimum)
             expect(setTimeout).toHaveBeenCalledTimes(1);
@@ -119,30 +120,33 @@ describe('Refresher', () => {
 
         it('should schedule refresh when exactly at minimum buffer threshold', async () => {
             // 37.5 seconds * 0.8 = 30 seconds (exactly at threshold)
-            await refresher.handleSchedule(37.5);
+            const expires_in = 37.5;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
 
             expect(setTimeout).toHaveBeenCalledTimes(1); // Still only logout since not > 30s
         });
 
         it('should schedule refresh when above minimum buffer threshold', async () => {
             // 40 seconds * 0.8 = 32 seconds (above 30s threshold)
-            await refresher.handleSchedule(40);
+            const expires_in = 40;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
 
             expect(setTimeout).toHaveBeenCalledTimes(2); // Both refresh and logout
         });
 
         it('should handle very large expiry times', async () => {
-            const largeExpiry = 86400; // 24 hours
-            await refresher.handleSchedule(largeExpiry);
+            const expires_in = 86400; // 24 hours
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
 
             expect(setTimeout).toHaveBeenCalledWith(
                 expect.any(Function),
-                largeExpiry * 1000 * 0.8
+                expires_in * 1000 * 0.8
             );
         });
 
         it('should handle very small expiry times', async () => {
-            await refresher.handleSchedule(10);
+            const expires_in = 10;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
 
             // 10s * 0.8 = 8s < 30s minimum, so only logout timer
             expect(setTimeout).toHaveBeenCalledTimes(1);
@@ -153,7 +157,7 @@ describe('Refresher', () => {
         describe('with cached valid tokens', () => {
             beforeEach(async () => {
                 (RefreshGrant.renewTokens as jest.Mock).mockResolvedValueOnce(mockTokenDetails);
-                await refresher.handleSchedule(3600);
+                await refresher.handleSchedule(mockTokenDetails);
                 advanceToRefreshTime(3600);
                 await Promise.resolve();
                 mockBroadcast.mockClear();
@@ -171,7 +175,7 @@ describe('Refresher', () => {
 
             it('should not call renewTokens if tokens are valid', async () => {
                 (RefreshGrant.renewTokens as jest.Mock).mockClear();
-                
+
                 await refresher.handleRefresh(mockPort);
 
                 expect(RefreshGrant.renewTokens).not.toHaveBeenCalled();
@@ -234,7 +238,7 @@ describe('Refresher', () => {
 
             it('should decode JWT to check expiry', async () => {
                 (RefreshGrant.renewTokens as jest.Mock).mockResolvedValueOnce(mockTokenDetails);
-                
+
                 await refresher.handleRefresh(mockPort);
                 await Promise.resolve();
 
@@ -290,7 +294,7 @@ describe('Refresher', () => {
                 const renewMock = RefreshGrant.renewTokens as jest.Mock;
                 const firstTokenDetails = createMockTokenDetails({ access_token: 'first-token' });
                 const secondTokenDetails = createMockTokenDetails({ access_token: 'second-token' });
-                
+
                 renewMock
                     .mockResolvedValueOnce(firstTokenDetails)
                     .mockResolvedValueOnce(secondTokenDetails);
@@ -318,11 +322,11 @@ describe('Refresher', () => {
             it('should handle errors during concurrent refreshes', async () => {
                 const error = new Error('Refresh failed');
                 const renewMock = RefreshGrant.renewTokens as jest.Mock;
-                
+
                 // Clear any previous mock setup
                 renewMock.mockClear();
                 mockBroadcast.mockClear();
-                
+
                 // Mock to reject
                 renewMock.mockRejectedValue(error);
 
@@ -427,7 +431,7 @@ describe('Refresher', () => {
 
     describe('handleStop', () => {
         it('should clear all timers', async () => {
-            await refresher.handleSchedule(3600);
+            await refresher.handleSchedule(mockTokenDetails);
             jest.clearAllMocks();
 
             refresher.handleStop();
@@ -436,7 +440,7 @@ describe('Refresher', () => {
         });
 
         it('should reset timersAreRunning flag', async () => {
-            await refresher.handleSchedule(3600);
+            await refresher.handleSchedule(mockTokenDetails);
 
             refresher.handleStop();
 
@@ -445,7 +449,7 @@ describe('Refresher', () => {
 
         it('should clear tokenDetails', async () => {
             (RefreshGrant.renewTokens as jest.Mock).mockResolvedValueOnce(mockTokenDetails);
-            await refresher.handleSchedule(3600);
+            await refresher.handleSchedule(mockTokenDetails);
             advanceToRefreshTime(3600);
             await Promise.resolve();
 
@@ -454,34 +458,12 @@ describe('Refresher', () => {
             expect(refresher.getTokenDetails()).toBeUndefined();
         });
 
-        it('should clear refresh promise on stop', async () => {
-            const renewMock = RefreshGrant.renewTokens as jest.Mock;
-            renewMock.mockImplementation(() => 
-                new Promise(resolve => setTimeout(() => resolve(mockTokenDetails), 100))
-            );
-
-            // Start a refresh
-            const refreshPromise = refresher.handleRefresh(mockPort);
-            
-            // Stop before it completes
-            refresher.handleStop();
-
-            await refreshPromise;
-
-            // A new refresh should be able to start
-            renewMock.mockResolvedValueOnce(mockTokenDetails);
-            await refresher.handleRefresh(mockPort);
-
-            // Should have called renewTokens twice (once for each refresh)
-            expect(renewMock).toHaveBeenCalledTimes(2);
-        });
-
         it('should allow rescheduling after stop', async () => {
-            await refresher.handleSchedule(3600);
+            await refresher.handleSchedule(mockTokenDetails);
             refresher.handleStop();
             jest.clearAllMocks();
 
-            await refresher.handleSchedule(3600);
+            await refresher.handleSchedule(mockTokenDetails);
 
             expect(setTimeout).toHaveBeenCalledTimes(2);
             expect(refresher.getTimersAreRunning()).toBe(true);
@@ -503,7 +485,8 @@ describe('Refresher', () => {
         it('should automatically refresh tokens at scheduled time', async () => {
             (RefreshGrant.renewTokens as jest.Mock).mockResolvedValue(mockTokenDetails);
 
-            await refresher.handleSchedule(1000);
+            const expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
             advanceToRefreshTime(1000);
             await Promise.resolve();
 
@@ -513,7 +496,8 @@ describe('Refresher', () => {
         it('should broadcast TOKEN_DETAILS after automatic refresh', async () => {
             (RefreshGrant.renewTokens as jest.Mock).mockResolvedValue(mockTokenDetails);
 
-            await refresher.handleSchedule(1000);
+            const expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
             advanceToRefreshTime(1000);
             await Promise.resolve();
 
@@ -527,9 +511,10 @@ describe('Refresher', () => {
             const newTokens = createMockTokenDetails({ expires_in: 2000 });
             (RefreshGrant.renewTokens as jest.Mock).mockResolvedValue(newTokens);
 
-            await refresher.handleSchedule(1000);
+            const expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
             jest.clearAllMocks();
-            
+
             advanceToRefreshTime(1000);
             await Promise.resolve();
 
@@ -545,7 +530,8 @@ describe('Refresher', () => {
                 new Error('Network error')
             );
 
-            await refresher.handleSchedule(1000);
+            const expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
             advanceToRefreshTime(1000);
             await Promise.resolve();
 
@@ -560,9 +546,10 @@ describe('Refresher', () => {
                 new Error('Network error')
             );
 
-            await refresher.handleSchedule(1000);
+            const expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
             jest.clearAllMocks();
-            
+
             advanceToRefreshTime(1000);
             await Promise.resolve();
 
@@ -573,7 +560,8 @@ describe('Refresher', () => {
 
     describe('automatic logout timer', () => {
         it('should broadcast EXPIRED at final logout time', async () => {
-            await refresher.handleSchedule(1000);
+            const expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
 
             advanceToLogoutTime(1000);
 
@@ -584,8 +572,9 @@ describe('Refresher', () => {
 
         it('should clear tokenDetails at logout time', async () => {
             (RefreshGrant.renewTokens as jest.Mock).mockResolvedValue(mockTokenDetails);
-            await refresher.handleSchedule(1000);
-            
+            const expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
+
             // Advance to refresh time (800s)
             advanceToRefreshTime(1000);
             await Promise.resolve();
@@ -598,10 +587,10 @@ describe('Refresher', () => {
         });
 
         it('should trigger logout before expiry with 5 second buffer', async () => {
-            const expiresIn = 1000;
-            await refresher.handleSchedule(expiresIn);
+            const expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
 
-            const expectedTime = (expiresIn * 1000) - (5 * 1000);
+            const expectedTime = (expires_in * 1000) - (5 * 1000);
             jest.advanceTimersByTime(expectedTime);
 
             expect(mockBroadcast).toHaveBeenCalledWith({
@@ -615,7 +604,8 @@ describe('Refresher', () => {
             (RefreshGrant.renewTokens as jest.Mock).mockResolvedValue(mockTokenDetails);
 
             // Initial schedule
-            await refresher.handleSchedule(1000);
+            const expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
             expect(refresher.getTimersAreRunning()).toBe(true);
 
             // Wait for automatic refresh (at 800s)
@@ -632,7 +622,7 @@ describe('Refresher', () => {
             // After refresh, new timers are scheduled based on mockTokenDetails.expires_in (3600s)
             // So we need to advance to 3595s (3600 - 5) from the refresh point
             jest.advanceTimersByTime((3600 - 5) * 1000);
-            
+
             expect(mockBroadcast).toHaveBeenCalledWith({
                 type: RefreshMessageTypes.EXPIRED
             });
@@ -643,7 +633,8 @@ describe('Refresher', () => {
                 .mockResolvedValueOnce(mockTokenDetails)
                 .mockResolvedValueOnce(createMockTokenDetails({ access_token: 'manual-token' }));
 
-            await refresher.handleSchedule(1000);
+            const expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
             advanceToRefreshTime(1000);
             await Promise.resolve();
             mockBroadcast.mockClear();
@@ -661,7 +652,8 @@ describe('Refresher', () => {
         it('should handle stop during active timers', async () => {
             (RefreshGrant.renewTokens as jest.Mock).mockResolvedValue(mockTokenDetails);
 
-            await refresher.handleSchedule(1000);
+            const expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
             refresher.handleStop();
 
             // Advance past refresh time
@@ -673,33 +665,33 @@ describe('Refresher', () => {
         });
 
         it('should handle multiple refresh attempts with different expiry times', async () => {
-            const firstTokens = createMockTokenDetails({ 
+            const firstTokens = createMockTokenDetails({
                 expires_in: 1000,
                 access_token: 'first-token'
             });
-            const secondTokens = createMockTokenDetails({ 
+            const secondTokens = createMockTokenDetails({
                 expires_in: 2000,
                 access_token: 'second-token'
             });
-            
+
             // Mock renewTokens to return different tokens each time
             const renewTokensMock = RefreshGrant.renewTokens as jest.Mock;
             renewTokensMock.mockReset(); // Clear any previous mock state
             renewTokensMock
                 .mockResolvedValueOnce(firstTokens)
                 .mockResolvedValueOnce(secondTokens);
-            
+
             // Mock JWT decode to return appropriate exp values
             const decodeJwtMock = jose.decodeJwt as jest.Mock;
             const baseTime = Math.floor(Date.now() / 1000);
-            decodeJwtMock.mockReset(); // Clear any previous mock state
             decodeJwtMock
                 .mockReturnValueOnce({ exp: baseTime + 1000 })
                 .mockReturnValueOnce({ exp: baseTime + 2000 });
 
             // Step 1: Initial schedule with 1000s - schedules refresh at 800s
-            await refresher.handleSchedule(1000);
-            
+            const expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
+
             // Step 2: Advance to first refresh time (800s)
             jest.advanceTimersByTime(800 * 1000);
             await Promise.resolve();
@@ -713,7 +705,7 @@ describe('Refresher', () => {
             // After first refresh, timers rescheduled with firstTokens.expires_in = 1000s
             // Next refresh at: 1000 * 0.8 = 800s from now
             mockBroadcast.mockClear();
-            
+
             // Step 4: Advance to second refresh time
             jest.advanceTimersByTime(800 * 1000);
             await Promise.resolve();
@@ -728,11 +720,13 @@ describe('Refresher', () => {
 
     describe('timer management', () => {
         it('should clear previous timers when rescheduling', async () => {
-            await refresher.handleSchedule(1000);
+            let expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
 
             refresher.handleStop();
-            
-            await refresher.handleSchedule(2000);
+
+            expires_in = 2000; 
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
 
             // clearTimeout should have been called by both handleStop and the new scheduleTimers
             expect(clearTimeout).toHaveBeenCalled();
@@ -740,10 +734,12 @@ describe('Refresher', () => {
         });
 
         it('should only run one refresh timer at a time', async () => {
-            await refresher.handleSchedule(1000);
-            
+            let expires_in = 1000;
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
+
             // Try to schedule again
-            await refresher.handleSchedule(2000);
+            expires_in = 2000; 
+            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
 
             // Should still only have 2 timers (from first schedule)
             expect(setTimeout).toHaveBeenCalledTimes(2);

@@ -62,14 +62,16 @@ export class WebWorkerSession extends SessionCore {
                     if (this.isActive) {
                         this.rejectRefresh(new Error(error || 'Token refresh failed'));
                     } else {
-                        this.rejectRefresh(new Error("No session to restore."));
+                        this.rejectRefresh(new Error("No session to restore"));
                     }
                     this.clearRefreshPromise();
                 }
                 break;
             case RefreshMessageTypes.EXPIRED:
-                this.onSessionExpiration?.();
-                await this.logout();
+                if (this.isActive) {
+                    this.onSessionExpiration?.();
+                    await this.logout();
+                }
                 if (this.refreshPromise && this.rejectRefresh) {
                     this.rejectRefresh(new Error(error || 'Token refresh failed'));
                     this.clearRefreshPromise();
@@ -82,7 +84,7 @@ export class WebWorkerSession extends SessionCore {
     async handleRedirectFromLogin() {
         await super.handleRedirectFromLogin();
         if (this.isActive) { // If login was successful, tell the worker to schedule refreshing
-            this.worker.port.postMessage({ type: RefreshMessageTypes.SCHEDULE, payload: { expiresIn: this.getExpiresIn() } });
+            this.worker.port.postMessage({ type: RefreshMessageTypes.SCHEDULE, payload: this.getTokenDetails() });
         }
     }
 

@@ -41,7 +41,7 @@ self.onconnect = (event: any) => {
         const { type, payload } = event.data;
         switch (type) {
             case RefreshMessageTypes.SCHEDULE:
-                refresher.handleSchedule(payload.expiresIn);
+                refresher.handleSchedule(payload);
                 break;
             case RefreshMessageTypes.REFRESH:
                 refresher.handleRefresh(port);
@@ -79,10 +79,16 @@ export class Refresher {
         this.database = database;
     }
 
-    async handleSchedule(expiresIn: number) {
+    async handleSchedule(tokenDetails: TokenDetails) {
+        this.tokenDetails = tokenDetails;
+        this.exp = decodeJwt(this.tokenDetails.access_token).exp;
+        this.broadcast({
+            type: RefreshMessageTypes.TOKEN_DETAILS,
+            payload: { tokenDetails: this.tokenDetails }
+        });
         if (!this.timersAreRunning) {
-            console.log(`[RefreshWorker] Scheduling timers, expiry in ${expiresIn}s`);
-            this.scheduleTimers(expiresIn);
+            console.log(`[RefreshWorker] Scheduling timers, expiry in ${this.tokenDetails.expires_in}s`);
+            this.scheduleTimers(this.tokenDetails.expires_in);
             this.timersAreRunning = true;
         }
     }
@@ -101,10 +107,15 @@ export class Refresher {
     }
 
     handleStop() {
-        console.log('[RefreshWorker] Received STOP, clearing timers.');
+        if (!this.tokenDetails) {
+            console.log('[RefreshWorker] Received STOP, being idle');
+            return;
+        }
+        this.broadcast({ type: RefreshMessageTypes.EXPIRED });
         this.tokenDetails = undefined;
         this.exp = undefined;
         this.refreshPromise = undefined;
+        console.log('[RefreshWorker] Received STOP, clearing timers');
         this.clearAllTimers();
     }
 
@@ -128,14 +139,15 @@ export class Refresher {
                 payload: { tokenDetails: this.tokenDetails }
             });
 
-            console.log(`[RefreshWorker] Token refreshed.`);
-            console.log(`[RefreshWorker] Scheduling timers, expiry in ${this.tokenDetails.expires_in}s.`);
+            console.log(`[RefreshWorker] Token refreshed`);
+            console.log(`[RefreshWorker] Scheduling timers, expiry in ${this.tokenDetails.expires_in}s`);
             this.scheduleTimers(this.tokenDetails.expires_in);
         } catch (error: any) {
             this.broadcast({
                 type: RefreshMessageTypes.ERROR_ON_REFRESH,
                 error: error.message
             });
+            console.log(`[RefreshWorker]`, error.message);
         } finally {
             this.refreshPromise = undefined;
         }
@@ -174,6 +186,10 @@ export class Refresher {
         }
         const currentTimeSeconds = Math.floor(Date.now() / 1000);
         return exp < (currentTimeSeconds + bufferSeconds);
+    }
+
+    protected setTokenDetails(tokenDetails: TokenDetails) {
+        this.tokenDetails = tokenDetails;
     }
 
 
