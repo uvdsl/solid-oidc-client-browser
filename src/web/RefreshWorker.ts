@@ -68,6 +68,8 @@ export class Refresher {
     private broadcast: (message: any) => void;
     private database: SessionDatabase;
 
+    private refreshPromise?: Promise<void>;
+
 
     constructor(
         broadcast: (message: any) => void,
@@ -102,19 +104,30 @@ export class Refresher {
         console.log('[RefreshWorker] Received STOP, clearing timers.');
         this.tokenDetails = undefined;
         this.exp = undefined;
+        this.refreshPromise = undefined;
         this.clearAllTimers();
     }
 
     private async performRefresh() {
+        if (this.refreshPromise) {
+            console.log('[RefreshWorker] Refresh already in progress, waiting...');
+            return this.refreshPromise;
+        }
+
+        this.refreshPromise = this.doRefresh();
+        return this.refreshPromise;
+    }
+
+    private async doRefresh(): Promise<void> {
         try {
             this.tokenDetails = await renewTokens(this.database);
             this.exp = decodeJwt(this.tokenDetails.access_token).exp;
-            // On success, broadcast the new token details to ALL tabs
+
             this.broadcast({
                 type: RefreshMessageTypes.TOKEN_DETAILS,
                 payload: { tokenDetails: this.tokenDetails }
             });
-            // Reschedule the next cycle
+
             console.log(`[RefreshWorker] Token refreshed.`);
             console.log(`[RefreshWorker] Scheduling timers, expiry in ${this.tokenDetails.expires_in}s.`);
             this.scheduleTimers(this.tokenDetails.expires_in);
@@ -123,6 +136,8 @@ export class Refresher {
                 type: RefreshMessageTypes.ERROR_ON_REFRESH,
                 error: error.message
             });
+        } finally {
+            this.refreshPromise = undefined;
         }
     }
 

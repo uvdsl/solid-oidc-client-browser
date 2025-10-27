@@ -242,6 +242,106 @@ describe('Refresher', () => {
             });
         });
 
+        describe('concurrent refresh prevention', () => {
+            it('should not make multiple concurrent refresh calls', async () => {
+                const renewMock = RefreshGrant.renewTokens as jest.Mock;
+                let resolveRefresh: (value: any) => void;
+                const refreshPromise = new Promise(resolve => {
+                    resolveRefresh = resolve;
+                });
+                renewMock.mockReturnValue(refreshPromise);
+
+                // Start two refreshes simultaneously
+                const refresh1 = refresher.handleRefresh(mockPort);
+                const refresh2 = refresher.handleRefresh(mockPort);
+
+                // Resolve the refresh
+                resolveRefresh!(mockTokenDetails);
+                await Promise.all([refresh1, refresh2]);
+
+                // Should only call renewTokens once
+                expect(renewMock).toHaveBeenCalledTimes(1);
+            });
+
+            it('should broadcast tokens to all tabs after concurrent refresh completes', async () => {
+                const renewMock = RefreshGrant.renewTokens as jest.Mock;
+                let resolveRefresh: (value: any) => void;
+                const refreshPromise = new Promise(resolve => {
+                    resolveRefresh = resolve;
+                });
+                renewMock.mockReturnValue(refreshPromise);
+
+                const refresh1 = refresher.handleRefresh(mockPort);
+                const refresh2 = refresher.handleRefresh(mockPort);
+
+                // Resolve the refresh
+                resolveRefresh!(mockTokenDetails);
+                await Promise.all([refresh1, refresh2]);
+
+                // Should broadcast once after the refresh completes
+                expect(mockBroadcast).toHaveBeenCalledTimes(1);
+                expect(mockBroadcast).toHaveBeenCalledWith({
+                    type: RefreshMessageTypes.TOKEN_DETAILS,
+                    payload: { tokenDetails: mockTokenDetails }
+                });
+            });
+
+            it('should allow subsequent refreshes after first completes', async () => {
+                const renewMock = RefreshGrant.renewTokens as jest.Mock;
+                const firstTokenDetails = createMockTokenDetails({ access_token: 'first-token' });
+                const secondTokenDetails = createMockTokenDetails({ access_token: 'second-token' });
+                
+                renewMock
+                    .mockResolvedValueOnce(firstTokenDetails)
+                    .mockResolvedValueOnce(secondTokenDetails);
+
+                // Mock JWT decode for first token
+                (jose.decodeJwt as jest.Mock).mockReturnValueOnce({
+                    exp: Math.floor(Date.now() / 1000) + 3600
+                });
+
+                // First refresh
+                await refresher.handleRefresh(mockPort);
+                advanceToRefreshTime(3600);
+
+                // Mock JWT decode to return expired token for second call
+                (jose.decodeJwt as jest.Mock).mockReturnValue({
+                    exp: Math.floor(Date.now() / 1000) - 100
+                });
+
+                // Second refresh should work because token is now expired
+                await refresher.handleRefresh(mockPort);
+
+                expect(renewMock).toHaveBeenCalledTimes(2);
+            });
+
+            it('should handle errors during concurrent refreshes', async () => {
+                const error = new Error('Refresh failed');
+                const renewMock = RefreshGrant.renewTokens as jest.Mock;
+                
+                // Clear any previous mock setup
+                renewMock.mockClear();
+                mockBroadcast.mockClear();
+                
+                // Mock to reject
+                renewMock.mockRejectedValue(error);
+
+                const refresh1 = refresher.handleRefresh(mockPort);
+                const refresh2 = refresher.handleRefresh(mockPort);
+
+                // Wait for both to complete (they won't reject since we catch errors)
+                await Promise.all([refresh1, refresh2]);
+
+                // Should still only call renewTokens once
+                expect(renewMock).toHaveBeenCalledTimes(1);
+                // Should broadcast error once
+                expect(mockBroadcast).toHaveBeenCalledWith({
+                    type: RefreshMessageTypes.ERROR_ON_REFRESH,
+                    error: 'Refresh failed'
+                });
+            });
+        });
+
         describe('error handling', () => {
             it('should broadcast error on refresh failure', async () => {
                 const error = new Error('Refresh failed');
@@ -352,6 +452,28 @@ describe('Refresher', () => {
             refresher.handleStop();
 
             expect(refresher.getTokenDetails()).toBeUndefined();
+        });
+
+        it('should clear refresh promise on stop', async () => {
+            const renewMock = RefreshGrant.renewTokens as jest.Mock;
+            renewMock.mockImplementation(() => 
+                new Promise(resolve => setTimeout(() => resolve(mockTokenDetails), 100))
+            );
+
+            // Start a refresh
+            const refreshPromise = refresher.handleRefresh(mockPort);
+            
+            // Stop before it completes
+            refresher.handleStop();
+
+            await refreshPromise;
+
+            // A new refresh should be able to start
+            renewMock.mockResolvedValueOnce(mockTokenDetails);
+            await refresher.handleRefresh(mockPort);
+
+            // Should have called renewTokens twice (once for each refresh)
+            expect(renewMock).toHaveBeenCalledTimes(2);
         });
 
         it('should allow rescheduling after stop', async () => {
