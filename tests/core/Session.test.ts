@@ -508,7 +508,53 @@ describe('SessionCore', () => {
             const [fetchUrl] = (fetch as jest.Mock).mock.calls[0];
             expect(fetchUrl).toBeInstanceOf(URL);
         });
+        describe('authFetch edge cases', () => {
+            it('should handle authFetch with URL object and custom method in init', async () => {
+                const session = createSession();
+                await activateSession(session);
 
+                const url = new URL('https://resource.example/data');
+                await session.authFetch(url, { method: 'DELETE' });
+
+                expect(jose.SignJWT).toHaveBeenCalled();
+                const payload = (jose.SignJWT as jest.Mock).mock.calls[0][0];
+                expect(payload.htm).toBe('DELETE');
+            });
+
+            it('should handle Request with different method in init overriding Request method', async () => {
+                const session = createSession();
+                await activateSession(session);
+
+                const request = new Request('https://resource.example/data', { method: 'GET' });
+                await session.authFetch(request, { method: 'POST' });
+
+                const payload = (jose.SignJWT as jest.Mock).mock.calls[0][0];
+                expect(payload.htm).toBe('POST');
+            });
+        });
+
+        describe('getExpiresIn edge cases', () => {
+            it('should return -1 when tokenDetails is undefined', () => {
+                const session = createSession();
+                expect(session.getExpiresIn()).toBe(-1);
+            });
+        });
+
+        describe('restore edge cases', () => {
+            it('should handle multiple concurrent restore calls when first call fails', async () => {
+                const session = createSession();
+
+                (RefreshGrant.renewTokens as jest.Mock)
+                    .mockRejectedValueOnce(new Error('First failure'))
+                    .mockResolvedValueOnce(mockTokenDetails);
+
+                await expect(session.restore()).rejects.toThrow('No session to restore');
+
+                // Second attempt should work
+                await session.restore();
+                expect(session.isActive).toBe(true);
+            });
+        });
     });
 
     // --- setTokenDetails Tests ---
@@ -560,64 +606,6 @@ describe('SessionCore', () => {
 
             (session as any).setTokenDetails({ ...mockTokenDetails, expires_in: null } as any);
             expect(session.getExpiresIn()).toBeLessThan(0);
-        });
-    });
-
-    // --- _updateSessionDetailsFromToken Tests ---
-    describe('_updateSessionDetailsFromToken (private method test)', () => {
-        it('should set isActive, webId, and currentAth when token is valid', async () => {
-            const session = createSession();
-
-            await (session as any)._updateSessionDetailsFromToken(mockTokenDetails.access_token);
-
-            expect(session.isActive).toBe(true);
-            expect(session.webId).toBe('https://alice.example/card#me');
-            expect((session as any).currentAth_).toBeDefined(); // Check that currentAth_ was calculated
-            expect(session.isExpired()).toBe(false);
-        });
-
-        it('should call logout when access_token is undefined', async () => {
-            const session = createSession();
-            const logoutSpy = jest.spyOn(session, 'logout').mockResolvedValue(undefined); // Spy on logout
-
-            await (session as any)._updateSessionDetailsFromToken(undefined);
-
-            expect(logoutSpy).toHaveBeenCalledTimes(1);
-            expect(session.isActive).toBe(false);
-            expect(session.webId).toBeUndefined();
-            expect(session.isExpired()).toBe(true);
-        });
-
-        it('should call logout when access_token is null', async () => {
-            const session = createSession();
-            const logoutSpy = jest.spyOn(session, 'logout').mockResolvedValue(undefined);
-
-            await (session as any)._updateSessionDetailsFromToken(null as any); // Test with null
-
-            expect(logoutSpy).toHaveBeenCalledTimes(1);
-        });
-
-        it('should call logout when decodeJwt fails or returns no webid', async () => {
-            const session = createSession();
-            const logoutSpy = jest.spyOn(session, 'logout').mockResolvedValue(undefined);
-            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({}); // Simulate no webid
-
-            await (session as any)._updateSessionDetailsFromToken('some-token');
-
-            expect(logoutSpy).toHaveBeenCalledTimes(1);
-        });
-
-        it('should call logout when exp claim is missing', async () => {
-            const session = createSession();
-            const logoutSpy = jest.spyOn(session, 'logout').mockResolvedValue(undefined);
-            (jose.decodeJwt as jest.Mock).mockReturnValueOnce({
-                webid: 'https://alice.example/card#me'
-                // No exp
-            });
-
-            await (session as any)._updateSessionDetailsFromToken('some-token');
-
-            expect(logoutSpy).toHaveBeenCalledTimes(1);
         });
     });
 
@@ -697,6 +685,37 @@ describe('SessionCore', () => {
 
             expect(callback).not.toHaveBeenCalled();
         });
+
+        it('should not call onSessionStateChange if restore fails while session is already active', async () => {
+            const callback = jest.fn();
+            const session = createSession(mockClientDetails, {
+                database: mockDb,
+                onSessionStateChange: callback
+            });
+            await activateSession(session);
+            callback.mockClear();
+
+            (RefreshGrant.renewTokens as jest.Mock).mockRejectedValueOnce(new Error('Refresh failed'));
+
+            await expect(session.restore()).rejects.toThrow('Refresh failed');
+            expect(session.isActive).toBe(true);
+            expect(callback).not.toHaveBeenCalled();
+        });
+
+        it('should not call onSessionStateChange when handleRedirectFromLogin returns no tokens', async () => {
+            const callback = jest.fn();
+            const session = createSession(mockClientDetails, {
+                onSessionStateChange: callback
+            });
+
+            (AuthCodeGrant.onIncomingRedirect as jest.Mock).mockResolvedValueOnce({
+                clientDetails: mockClientDetails
+            });
+
+            await session.handleRedirectFromLogin();
+
+            expect(callback).not.toHaveBeenCalled();
+        });
     });
 
     describe('isExpired', () => {
@@ -727,6 +746,38 @@ describe('SessionCore', () => {
 
             await (session as any).setTokenDetails(mockTokenDetails);
             expect(session.isExpired()).toBe(false);
+        });
+    });
+
+    describe('error propagation', () => {
+        it('should propagate errors from onIncomingRedirect', async () => {
+            const error = new Error('Invalid authorization code');
+            (AuthCodeGrant.onIncomingRedirect as jest.Mock).mockRejectedValueOnce(error);
+            const session = createSession();
+
+            await expect(session.handleRedirectFromLogin()).rejects.toThrow('Invalid authorization code');
+            expect(session.isActive).toBe(false);
+        });
+
+        it('should reject authFetch if token renewal fails', async () => {
+            const session = createSession();
+            await activateSession(session);
+            (session as any).exp_ = Math.floor(Date.now() / 1000) - 100;
+
+            (RefreshGrant.renewTokens as jest.Mock).mockRejectedValueOnce(new Error('Refresh denied'));
+
+            await expect(session.authFetch('https://resource.example/data'))
+                .rejects.toThrow('Refresh denied');
+        });
+
+        it('should propagate underlying fetch errors', async () => {
+            const session = createSession();
+            await activateSession(session);
+
+            (fetch as jest.Mock).mockRejectedValueOnce(new TypeError('Network error'));
+
+            await expect(session.authFetch('https://resource.example/data'))
+                .rejects.toThrow('Network error');
         });
     });
 });

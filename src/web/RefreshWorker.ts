@@ -29,7 +29,7 @@ const broadcast = (message: string) => {
 
 let refresher: Refresher;
 
-self.onconnect = (event: any) => {
+self.onconnect = (event: MessageEvent) => {
     const port = event.ports[0];
     ports.add(port);
     // lazy init
@@ -37,7 +37,7 @@ self.onconnect = (event: any) => {
         refresher = new Refresher(broadcast, new SessionIDB());
     }
     // handle messages
-    port.onmessage = (event: any) => {
+    port.onmessage = (event: MessageEvent) => {
         const { type, payload } = event.data;
         switch (type) {
             case RefreshMessageTypes.SCHEDULE:
@@ -72,7 +72,7 @@ export class Refresher {
 
 
     constructor(
-        broadcast: (message: any) => void,
+        broadcast: (message: string) => void,
         database: SessionDatabase
     ) {
         this.broadcast = broadcast;
@@ -86,11 +86,9 @@ export class Refresher {
             type: RefreshMessageTypes.TOKEN_DETAILS,
             payload: { tokenDetails: this.tokenDetails }
         });
-        if (!this.timersAreRunning) {
-            console.log(`[RefreshWorker] Scheduling timers, expiry in ${this.tokenDetails.expires_in}s`);
-            this.scheduleTimers(this.tokenDetails.expires_in);
-            this.timersAreRunning = true;
-        }
+        console.log(`[RefreshWorker] Scheduling timers, expiry in ${this.tokenDetails.expires_in}s`);
+        this.scheduleTimers(this.tokenDetails.expires_in);
+        this.timersAreRunning = true;
     }
 
     async handleRefresh(requestingPort: any): Promise<void> {

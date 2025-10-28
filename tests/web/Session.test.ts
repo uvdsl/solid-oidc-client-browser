@@ -8,7 +8,7 @@ import { TokenDetails } from '../../src/core/SessionInformation';
 
 jest.mock('../../src/web/RefreshWorkerUrl', () => ({
     __esModule: true,
-    getMetaUrl: () => 'http://localhost/mocked-from-file.js',
+    getWorkerUrl: () => new URL('http://localhost/mocked-from-file.js'),
 }));
 
 jest.mock('../../src/core/Session');

@@ -78,14 +78,12 @@ describe('Refresher', () => {
             expect(setTimeout).toHaveBeenCalledTimes(2);
         });
 
-        it('should not schedule timers if already running', async () => {
+        it('should re-schedule timers, even if already running', async () => {
             await refresher.handleSchedule(mockTokenDetails);
-            jest.clearAllMocks();
-
             await refresher.handleSchedule(mockTokenDetails);
 
-            expect(setTimeout).not.toHaveBeenCalled();
             expect(refresher.getTimersAreRunning()).toBe(true);
+            expect(setTimeout).toHaveBeenCalledTimes(4);
         });
 
         it('should schedule refresh at 80% of expiry time', async () => {
@@ -725,7 +723,7 @@ describe('Refresher', () => {
 
             refresher.handleStop();
 
-            expires_in = 2000; 
+            expires_in = 2000;
             await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
 
             // clearTimeout should have been called by both handleStop and the new scheduleTimers
@@ -733,16 +731,5 @@ describe('Refresher', () => {
             expect(setTimeout).toHaveBeenCalledTimes(4); // 2 from first schedule + 2 from second
         });
 
-        it('should only run one refresh timer at a time', async () => {
-            let expires_in = 1000;
-            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
-
-            // Try to schedule again
-            expires_in = 2000; 
-            await refresher.handleSchedule({ ...mockTokenDetails, expires_in });
-
-            // Should still only have 2 timers (from first schedule)
-            expect(setTimeout).toHaveBeenCalledTimes(2);
-        });
     });
 });

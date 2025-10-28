@@ -264,7 +264,7 @@ export class SessionCore implements Session {
   }
 
   getExpiresIn() {
-    return this.information.tokenDetails!.expires_in ?? -1;
+    return this.information.tokenDetails?.expires_in ?? -1;
   }
 
   isExpired() {

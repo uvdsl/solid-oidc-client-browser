@@ -1,6 +1,6 @@
 import { DereferencableIdClientDetails, DynamicRegistrationClientDetails } from '../core';
 import { SessionOptions, SessionCore } from '../core/Session';
-import { getMetaUrl } from './RefreshWorkerUrl';
+import { getWorkerUrl } from './RefreshWorkerUrl';
 import { RefreshMessageTypes } from './RefreshWorker';
 import { SessionIDB } from './SessionDatabase';
 
@@ -32,7 +32,7 @@ export class WebWorkerSession extends SessionCore {
         this.onSessionExpiration = sessionOptions?.onSessionExpiration;
 
         // Allow consumer to provide worker URL, or use default
-        const workerUrl = sessionOptions?.workerUrl ?? new URL('./RefreshWorker.js', getMetaUrl());
+        const workerUrl = sessionOptions?.workerUrl ?? getWorkerUrl()
         this.worker = new SharedWorker(workerUrl, { type: 'module' });
         this.worker.port.onmessage = (event) => {
             this.handleWorkerMessage(event.data).catch(console.error);
@@ -89,6 +89,9 @@ export class WebWorkerSession extends SessionCore {
     }
 
     async restore() {
+        if (this.refreshPromise) {
+            return this.refreshPromise;
+        }
         this.refreshPromise = new Promise((resolve, reject) => {
             this.resolveRefresh = resolve;
             this.rejectRefresh = reject;
