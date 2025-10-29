@@ -21,10 +21,11 @@ Implemented for your typical web application, this library uses:
 - [x] the [IndexedDB API](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) to store refresh token information like `idp`, `client_id`, `refesh_token`, and the (non-extractable) DPoP KeyPair which was used in the AuthorizationCodeGrant. These are later re-used in the RefreshTokenGrant to renew the tokens or to restore a session.
 
 This library also provides a core version for advanced use cases where you need to manage the refresh lifecycle yourself.
-This may be the case when the IndexedDB API is not available, e.g. in a browser extension. Please see the wiki for corresponding documentation.
+This may be the case when the IndexedDB API is not available, e.g. in a browser extension. Please see the [wiki](https://github.com/uvdsl/solid-oidc-client-browser/wiki/API-Reference#using-the-core-library-for-extensions-and-custom-setups) for corresponding documentation.
 
 ## Installation
-You can use this library in your project. Let me know how you get on with it! :rocket:
+You can use this library in your project. Let me know how you get on with it! :rocket:  
+There is API documentation available in the [wiki](https://github.com/uvdsl/solid-oidc-client-browser/wiki/API-Reference).
 
 #### as `npm` package
 ```sh
@@ -42,7 +43,7 @@ Do not forget to adjust the version to the one you want! The latest version is d
 ## Quick Start
 
 You can use this library along the lines of the following example.
-For other usage examples, including usage with framework Vue or a mutli-page application, see the wiki.
+For other usage examples, including usage with framework Vue or a mutli-page application, see the [wiki](https://github.com/uvdsl/solid-oidc-client-browser/wiki/Usage-Examples).
 
 #### in a simple HTML page with JavaScript
 
@@ -79,6 +80,9 @@ For other usage examples, including usage with framework Vue or a mutli-page app
 
             const sessionOptions = {
                 onSessionExpirationWarning: () => {
+                    console.warn("Session state changed!");
+                },
+                onSessionExpirationWarning: () => {
                     console.warn("Session is about to expire!");
                     document.getElementById('welcome-message').textContent = "Warning: Session is expiring soon.";
                 },
@@ -113,7 +117,7 @@ For other usage examples, including usage with framework Vue or a mutli-page app
                     "You're not logged in.";
             });
 
-            // Handle redirect after login
+            // Handle page revisit
             try {
                 // either: handle redirect after login
                 await session.handleRedirectFromLogin();
