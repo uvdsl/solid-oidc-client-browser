@@ -7,7 +7,15 @@ import { DynamicRegistrationClientDetails, DereferencableIdClientDetails, Sessio
 
 export interface SessionOptions {
   database?: SessionDatabase
-  onSessionStateChange?: () => void;
+  onSessionStateChange?: (event?: Event) => void;
+  onSessionExpirationWarning?: (event?: Event) => void;
+  onSessionExpiration?: (event?: Event) => void;
+}
+
+export enum SessionEvents {
+  STATE_CHANGE = 'sessionStateChange',
+  EXPIRATION_WARNING = 'sessionExpirationWarning',
+  EXPIRATION = 'sessionExpiration',
 }
 
 /**
@@ -67,13 +75,11 @@ export interface Session {
  * 
  * If you are building a web app, use the Session implementation provided in the default `/web` version of this library.
  */
-export class SessionCore implements Session {
+export class SessionCore extends EventTarget implements Session {
   private isActive_: boolean = false;
   private exp_?: number;
   private webId_?: string = undefined;
   private currentAth_?: string = undefined;
-
-  protected onSessionStateChange?: () => void;
 
   private information: SessionInformation;
   private database?: SessionDatabase;
@@ -83,9 +89,15 @@ export class SessionCore implements Session {
   protected rejectRefresh?: ((reason?: any) => void);
 
   constructor(clientDetails?: DereferencableIdClientDetails | DynamicRegistrationClientDetails, sessionOptions?: SessionOptions) {
+    super();
     this.information = { clientDetails } as SessionInformation;
     this.database = sessionOptions?.database
-    this.onSessionStateChange = sessionOptions?.onSessionStateChange;
+    if (sessionOptions?.onSessionStateChange)
+      this.addEventListener(SessionEvents.STATE_CHANGE, (event: Event) => sessionOptions.onSessionStateChange?.(event))
+    if (sessionOptions?.onSessionExpirationWarning)
+      this.addEventListener(SessionEvents.EXPIRATION_WARNING, (event: Event) => sessionOptions?.onSessionExpirationWarning?.(event))
+    if (sessionOptions?.onSessionExpiration)
+      this.addEventListener(SessionEvents.EXPIRATION, (event: Event) => sessionOptions?.onSessionExpiration?.(event))
   }
 
   async login(idp: string, redirect_uri: string) {
@@ -108,12 +120,11 @@ export class SessionCore implements Session {
     this.information.idpDetails = newSessionInfo.idpDetails;
     await this.setTokenDetails(newSessionInfo.tokenDetails)
     // callback state change 
-    this.onSessionStateChange?.(); // we logged in
+    this.dispatchEvent(new CustomEvent(SessionEvents.STATE_CHANGE)); // we logged in
   }
 
   /**
    * Handles session restoration using the refresh token grant.
-   * Silently fails if session could not be restored (maybe there was no session in the first place).
    */
   async restore() {
     if (!this.database) {
@@ -140,12 +151,17 @@ export class SessionCore implements Session {
         if (this.isActive) {
           this.rejectRefresh!(new Error(error || 'Token refresh failed'));
           // do not change state (yet), let the app decide if they want to logout or if they just want to retry.
+          if (!this.isExpired()) {
+            this.dispatchEvent(new CustomEvent(SessionEvents.EXPIRATION_WARNING));
+          } else {
+            this.dispatchEvent(new CustomEvent(SessionEvents.EXPIRATION));
+          }
         } else {
           this.rejectRefresh!(new Error("No session to restore."));
         }
       }).finally(() => {
         this.clearRefreshPromise();
-        if (wasActive !== this.isActive) this.onSessionStateChange?.();
+        if (wasActive !== this.isActive) this.dispatchEvent(new CustomEvent(SessionEvents.STATE_CHANGE));
       })
 
     return this.refreshPromise;
@@ -176,7 +192,7 @@ export class SessionCore implements Session {
       this.database.close();
     }
     // callback state change
-    this.onSessionStateChange?.(); // we logged out
+    this.dispatchEvent(new CustomEvent(SessionEvents.STATE_CHANGE)); // we logged out
   }
 
   /**
@@ -263,19 +279,19 @@ export class SessionCore implements Session {
     return this.webId_;
   }
 
-  getExpiresIn() {
-    return this.information.tokenDetails?.expires_in ?? -1;
-  }
-
   isExpired() {
     if (!this.exp_) return true;
     return this._isTokenExpired(this.exp_);
   }
 
+  getExpiresIn() {
+    if (!this.exp_) return -1;
+    return this._getTokenTTL(this.exp_);
+  }
+
   protected getTokenDetails() {
     return this.information.tokenDetails;
   }
-
 
   //
   // Helpers
@@ -373,7 +389,11 @@ export class SessionCore implements Session {
     if (typeof exp !== 'number' || isNaN(exp)) {
       return true;
     }
+    return this._getTokenTTL(exp, bufferSeconds) < 0;
+  }
+
+  private _getTokenTTL(exp: number, bufferSeconds = 0) {
     const currentTimeSeconds = Math.floor(Date.now() / 1000);
-    return exp < (currentTimeSeconds + bufferSeconds);
+    return exp - (currentTimeSeconds + bufferSeconds);
   }
 }
