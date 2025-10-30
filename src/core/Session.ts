@@ -18,6 +18,18 @@ export enum SessionEvents {
   EXPIRATION = 'sessionExpiration',
 }
 
+export interface SessionStateChangeDetail {
+  isActive: boolean;
+  webId?: string;
+}
+
+/**
+ * `expires_in` in seconds
+ */
+export interface SessionExpirationWarningDetail {
+  expires_in: number
+}
+
 /**
  * The Session interface.
  * 
@@ -120,7 +132,7 @@ export class SessionCore extends EventTarget implements Session {
     this.information.idpDetails = newSessionInfo.idpDetails;
     await this.setTokenDetails(newSessionInfo.tokenDetails)
     // callback state change 
-    this.dispatchEvent(new CustomEvent(SessionEvents.STATE_CHANGE)); // we logged in
+    this.dispatchStateChangeEvent(); // we logged in
   }
 
   /**
@@ -152,16 +164,16 @@ export class SessionCore extends EventTarget implements Session {
           this.rejectRefresh!(new Error(error || 'Token refresh failed'));
           // do not change state (yet), let the app decide if they want to logout or if they just want to retry.
           if (!this.isExpired()) {
-            this.dispatchEvent(new CustomEvent(SessionEvents.EXPIRATION_WARNING));
+            this.dispatchExpirationWarningEvent();
           } else {
-            this.dispatchEvent(new CustomEvent(SessionEvents.EXPIRATION));
+            this.dispatchExpirationEvent();
           }
         } else {
           this.rejectRefresh!(new Error("No session to restore."));
         }
       }).finally(() => {
         this.clearRefreshPromise();
-        if (wasActive !== this.isActive) this.dispatchEvent(new CustomEvent(SessionEvents.STATE_CHANGE));
+        if (wasActive !== this.isActive) this.dispatchStateChangeEvent();
       })
 
     return this.refreshPromise;
@@ -192,7 +204,7 @@ export class SessionCore extends EventTarget implements Session {
       this.database.close();
     }
     // callback state change
-    this.dispatchEvent(new CustomEvent(SessionEvents.STATE_CHANGE)); // we logged out
+    this.dispatchStateChangeEvent(); // we logged out
   }
 
   /**
@@ -395,5 +407,21 @@ export class SessionCore extends EventTarget implements Session {
   private _getTokenTTL(exp: number, bufferSeconds = 0) {
     const currentTimeSeconds = Math.floor(Date.now() / 1000);
     return exp - (currentTimeSeconds + bufferSeconds);
+  }
+
+  // 
+  // Events
+  //
+
+  protected dispatchStateChangeEvent() {
+    this.dispatchEvent(new CustomEvent<SessionStateChangeDetail>(SessionEvents.STATE_CHANGE, { detail: { isActive: this.isActive, webId: this.webId } }));
+  }
+
+  protected dispatchExpirationWarningEvent() {
+    this.dispatchEvent(new CustomEvent<SessionExpirationWarningDetail>(SessionEvents.EXPIRATION_WARNING, { detail: { expires_in: this.getExpiresIn() } }));
+  }
+
+  protected dispatchExpirationEvent() {
+    this.dispatchEvent(new CustomEvent(SessionEvents.EXPIRATION));
   }
 }

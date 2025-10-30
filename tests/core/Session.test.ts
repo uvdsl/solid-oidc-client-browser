@@ -866,5 +866,84 @@ describe('SessionCore', () => {
             expect(legacyCallback).toHaveBeenCalledTimes(1);
         });
     });
+
+    // ADD this new test block to your SessionCore.test.ts file
+
+    // --- Event Payload Tests ---
+    describe('Event Payloads (detail property)', () => {
+        it('should dispatch STATE_CHANGE with correct detail on successful login', async () => {
+            const listener = jest.fn();
+            const session = createSession();
+            session.addEventListener(SessionEvents.STATE_CHANGE, listener);
+
+            (AuthCodeGrant.onIncomingRedirect as jest.Mock).mockResolvedValueOnce(mockSessionInfo);
+            await session.handleRedirectFromLogin();
+
+            expect(listener).toHaveBeenCalledTimes(1);
+            const event = listener.mock.calls[0][0] as CustomEvent;
+            expect(event.detail).toEqual({
+                isActive: true,
+                webId: 'https://alice.example/card#me',
+            });
+        });
+
+        it('should dispatch STATE_CHANGE with correct detail on logout', async () => {
+            const listener = jest.fn();
+            const session = createSession();
+            await activateSession(session); // Start active
+            session.addEventListener(SessionEvents.STATE_CHANGE, listener);
+
+            await session.logout();
+
+            expect(listener).toHaveBeenCalledTimes(1);
+            const event = listener.mock.calls[0][0] as CustomEvent;
+            expect(event.detail).toEqual({
+                isActive: false,
+                webId: undefined,
+            });
+        });
+
+        it('should dispatch EXPIRATION_WARNING with correct detail when refresh fails for an active, unexpired session', async () => {
+            const listener = jest.fn();
+            const session = createSession();
+            await activateSession(session); // Start active
+            session.addEventListener(SessionEvents.EXPIRATION_WARNING, listener);
+
+            // Mock the session to be unexpired but have a known TTL
+            jest.spyOn(session, 'isExpired').mockReturnValue(false);
+            jest.spyOn(session, 'getExpiresIn').mockReturnValue(900);
+            (RefreshGrant.renewTokens as jest.Mock).mockRejectedValueOnce(new Error('Network Down'));
+
+            // Restore will fail, triggering the warning
+            await expect(session.restore()).rejects.toThrow();
+            await flushPromises();
+
+            expect(listener).toHaveBeenCalledTimes(1);
+            const event = listener.mock.calls[0][0] as CustomEvent;
+            expect(event.detail).toEqual({
+                expires_in: 900,
+            });
+        });
+
+        it('should dispatch EXPIRATION with null detail when refresh fails for an active, expired session', async () => {
+            const listener = jest.fn();
+            const session = createSession();
+            await activateSession(session); // Start active
+            session.addEventListener(SessionEvents.EXPIRATION, listener);
+
+            // Mock the session to be expired
+            jest.spyOn(session, 'isExpired').mockReturnValue(true);
+            (RefreshGrant.renewTokens as jest.Mock).mockRejectedValueOnce(new Error('Network Down'));
+
+            // Restore will fail, triggering the expiration event
+            await expect(session.restore()).rejects.toThrow();
+            await flushPromises();
+
+            expect(listener).toHaveBeenCalledTimes(1);
+            const event = listener.mock.calls[0][0] as CustomEvent;
+            // The event is dispatched with no detail payload
+            expect(event.detail).toBeNull();
+        });
+    });
 });
 
