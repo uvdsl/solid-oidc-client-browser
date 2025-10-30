@@ -1,5 +1,5 @@
 import { DereferencableIdClientDetails, DynamicRegistrationClientDetails } from '../core';
-import { SessionOptions, SessionCore, SessionEvents } from '../core/Session';
+import { SessionOptions, SessionCore } from '../core/Session';
 import { getWorkerUrl } from './RefreshWorkerUrl';
 import { RefreshMessageTypes } from './RefreshWorker';
 import { SessionIDB } from './SessionDatabase';
@@ -42,7 +42,7 @@ export class WebWorkerSession extends SessionCore {
                 const wasActive = this.isActive;
                 await this.setTokenDetails(payload.tokenDetails);
                 if (wasActive !== this.isActive)
-                    this.dispatchEvent(new CustomEvent(SessionEvents.STATE_CHANGE));
+                    this.dispatchStateChangeEvent();
                 if (this.refreshPromise && this.resolveRefresh) {
                     this.resolveRefresh();
                     this.clearRefreshPromise();
@@ -50,7 +50,7 @@ export class WebWorkerSession extends SessionCore {
                 break;
             case RefreshMessageTypes.ERROR_ON_REFRESH:
                 if (this.isActive)
-                    this.dispatchEvent(new CustomEvent(SessionEvents.EXPIRATION_WARNING));
+                    this.dispatchExpirationWarningEvent();
                 if (this.refreshPromise && this.rejectRefresh) {
                     if (this.isActive) {
                         this.rejectRefresh(new Error(error || 'Token refresh failed'));
@@ -62,7 +62,7 @@ export class WebWorkerSession extends SessionCore {
                 break;
             case RefreshMessageTypes.EXPIRED:
                 if (this.isActive) {
-                    this.dispatchEvent(new CustomEvent(SessionEvents.EXPIRATION));
+                    this.dispatchExpirationEvent();
                     await this.logout();
                 }
                 if (this.refreshPromise && this.rejectRefresh) {
