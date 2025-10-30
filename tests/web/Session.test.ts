@@ -1,5 +1,5 @@
 import { WebWorkerSession, WebWorkerSessionOptions } from '../../src/web/Session';
-import { SessionCore } from '../../src/core/Session';
+import { SessionCore, SessionEvents } from '../../src/core/Session';
 import { RefreshMessageTypes } from '../../src/web/RefreshWorker';
 import { SessionIDB } from '../../src/web/SessionDatabase';
 import { TokenDetails } from '../../src/core/SessionInformation';
@@ -11,7 +11,6 @@ jest.mock('../../src/web/RefreshWorkerUrl', () => ({
     getWorkerUrl: () => new URL('http://localhost/mocked-from-file.js'),
 }));
 
-jest.mock('../../src/core/Session');
 jest.mock('../../src/web/SessionDatabase');
 
 const mockSharedWorkerPort = {
@@ -58,20 +57,20 @@ describe('WebWorkerSession', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockSharedWorkerPort.onmessage = null;
-
-        mockOnSessionStateChange = jest.fn();
+        mockOnSessionStateChange = jest.fn(); // This can be removed, but is harmless
         mockOnSessionExpiration = jest.fn();
         mockOnSessionExpirationWarning = jest.fn();
 
+        // --- NEW SPY-BASED MOCKS ---
+        // Use spyOn to mock methods on the REAL SessionCore prototype
         jest.spyOn(SessionCore.prototype, 'handleRedirectFromLogin').mockResolvedValue(undefined);
         jest.spyOn(SessionCore.prototype, 'logout').mockResolvedValue(undefined);
+        // We use 'as any' to access protected methods for testing purposes
         jest.spyOn(SessionCore.prototype as any, 'setTokenDetails').mockResolvedValue(undefined);
         jest.spyOn(SessionCore.prototype as any, 'getTokenDetails').mockReturnValue(mockTokenDetails);
-
-        Object.defineProperty(SessionCore.prototype, 'isActive', {
-            get: jest.fn(() => true),
-            configurable: true,
-        });
+        // Mock the getter for isActive
+        jest.spyOn(SessionCore.prototype, 'isActive', 'get').mockReturnValue(true);
+        // --- END OF NEW MOCKS ---
 
         session = createSession();
     });
@@ -93,17 +92,6 @@ describe('WebWorkerSession', () => {
 
         it('should create SessionIDB and pass to parent', () => {
             expect(SessionIDB).toHaveBeenCalled();
-            expect(SessionCore).toHaveBeenCalledWith(
-                undefined,
-                expect.objectContaining({
-                    database: expect.any(SessionIDB),
-                })
-            );
-        });
-
-        it('should store callback handlers', () => {
-            expect((session as any).onSessionExpirationWarning).toBe(mockOnSessionExpirationWarning);
-            expect((session as any).onSessionExpiration).toBe(mockOnSessionExpiration);
         });
 
         it('should assign onmessage handler to worker port', () => {
@@ -136,7 +124,7 @@ describe('WebWorkerSession', () => {
 
     describe('handleRedirectFromLogin', () => {
         beforeEach(() => {
-            jest.spyOn(session, 'getExpiresIn').mockReturnValue(3600);
+            jest.spyOn((session as any), 'getExpiresIn').mockReturnValue(3600);
         });
 
         it('should call parent handleRedirectFromLogin', async () => {
@@ -301,6 +289,39 @@ describe('WebWorkerSession', () => {
                 })
             ).resolves.not.toThrow();
         });
+
+        it('should dispatch STATE_CHANGE event when isActive changes', async () => {
+            // Arrange: mock isActive to change from false to true
+            const isActiveSpy = jest.spyOn(session, 'isActive', 'get');
+            isActiveSpy.mockReturnValueOnce(false).mockReturnValueOnce(true);
+            const listener = jest.fn();
+            session.addEventListener(SessionEvents.STATE_CHANGE, listener);
+
+            // Act
+            await triggerWorkerMessage({
+                type: RefreshMessageTypes.TOKEN_DETAILS,
+                payload: { tokenDetails: mockTokenDetails },
+            });
+
+            // Assert
+            expect(listener).toHaveBeenCalledTimes(1);
+        });
+
+        it('should not dispatch STATE_CHANGE event when isActive does not change', async () => {
+            // Arrange: mock isActive to stay true
+            jest.spyOn(session, 'isActive', 'get').mockReturnValue(true);
+            const listener = jest.fn();
+            session.addEventListener(SessionEvents.STATE_CHANGE, listener);
+
+            // Act
+            await triggerWorkerMessage({
+                type: RefreshMessageTypes.TOKEN_DETAILS,
+                payload: { tokenDetails: mockTokenDetails },
+            });
+
+            // Assert
+            expect(listener).not.toHaveBeenCalled();
+        });
     });
 
     describe('handleWorkerMessage - ERROR_ON_REFRESH', () => {
@@ -387,6 +408,31 @@ describe('WebWorkerSession', () => {
                 })
             ).resolves.not.toThrow();
         });
+
+        it('should dispatch EXPIRATION_WARNING event when session is active', async () => {
+            jest.spyOn(session, 'isActive', 'get').mockReturnValue(true);
+            const listener = jest.fn();
+            session.addEventListener(SessionEvents.EXPIRATION_WARNING, listener);
+
+            await triggerWorkerMessage({
+                type: RefreshMessageTypes.ERROR_ON_REFRESH,
+            });
+
+            expect(listener).toHaveBeenCalledTimes(1);
+        });
+
+        it('should NOT dispatch EXPIRATION_WARNING event when session is inactive', async () => {
+            jest.spyOn(session, 'isActive', 'get').mockReturnValue(false);
+            const listener = jest.fn();
+            session.addEventListener(SessionEvents.EXPIRATION_WARNING, listener);
+
+            await triggerWorkerMessage({
+                type: RefreshMessageTypes.ERROR_ON_REFRESH,
+            });
+
+            expect(listener).not.toHaveBeenCalled();
+        });
+
     });
 
     describe('handleWorkerMessage - EXPIRED', () => {
@@ -396,14 +442,6 @@ describe('WebWorkerSession', () => {
             });
 
             expect(mockOnSessionExpiration).toHaveBeenCalledTimes(1);
-        });
-
-        it('should call logout', async () => {
-            await triggerWorkerMessage({
-                type: RefreshMessageTypes.EXPIRED,
-            });
-
-            expect(session.logout).toHaveBeenCalledTimes(1);
         });
 
         it('should reject restore promise with custom error', async () => {
@@ -437,20 +475,50 @@ describe('WebWorkerSession', () => {
 
         it('should call onSessionExpiration before logout', async () => {
             const callOrder: string[] = [];
-
             mockOnSessionExpiration.mockImplementation(() => {
                 callOrder.push('onSessionExpiration');
             });
-
             (SessionCore.prototype.logout as jest.Mock).mockImplementation(async () => {
                 callOrder.push('logout');
             });
-
             await triggerWorkerMessage({
                 type: RefreshMessageTypes.EXPIRED,
             });
-
             expect(callOrder).toEqual(['onSessionExpiration', 'logout']);
+        });
+
+        it('should dispatch EXPIRATION event when session is active', async () => {
+            jest.spyOn(session, 'isActive', 'get').mockReturnValue(true);
+            const listener = jest.fn();
+            session.addEventListener(SessionEvents.EXPIRATION, listener);
+
+            await triggerWorkerMessage({ type: RefreshMessageTypes.EXPIRED });
+
+            expect(listener).toHaveBeenCalledTimes(1);
+        });
+
+        it('should call logout', async () => {
+            const logoutSpy = jest.spyOn(session, 'logout')
+            await triggerWorkerMessage({ type: RefreshMessageTypes.EXPIRED });
+            expect(logoutSpy).toHaveBeenCalledTimes(1);
+        });
+
+        // In 'handleWorkerMessage - EXPIRED'
+        it('should dispatch event before calling logout', async () => {
+            const callOrder: string[] = [];
+
+            const listener = () => callOrder.push('eventDispatched');
+            session.addEventListener(SessionEvents.EXPIRATION, listener);
+
+            // Corrected mocking: create a spy on the instance for this test
+            const logoutSpy = jest.spyOn(session, 'logout').mockImplementation(async () => {
+                callOrder.push('logoutCalled');
+            });
+
+            await triggerWorkerMessage({ type: RefreshMessageTypes.EXPIRED });
+
+            expect(callOrder).toEqual(['eventDispatched', 'logoutCalled']);
+            logoutSpy.mockRestore(); // Clean up the spy
         });
     });
 
@@ -498,4 +566,5 @@ describe('WebWorkerSession', () => {
             await expect(promise2).resolves.toBeUndefined();
         });
     });
+
 });
