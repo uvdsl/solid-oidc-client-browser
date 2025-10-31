@@ -1,5 +1,5 @@
 // Import the class to be tested and necessary types
-import { SessionCore, SessionOptions } from '../../src/core/Session';
+import { SessionCore, SessionEvents, SessionOptions } from '../../src/core/Session';
 import { SessionDatabase } from '../../src/core/SessionDatabase';
 import { ClientDetails, SessionInformation, TokenDetails, DynamicRegistrationClientDetails, DereferencableIdClientDetails } from '../../src/core/SessionInformation';
 
@@ -536,7 +536,7 @@ describe('SessionCore', () => {
         describe('getExpiresIn edge cases', () => {
             it('should return -1 when tokenDetails is undefined', () => {
                 const session = createSession();
-                expect(session.getExpiresIn()).toBe(-1);
+                expect((session as any).getExpiresIn()).toBe(-1);
             });
         });
 
@@ -594,18 +594,19 @@ describe('SessionCore', () => {
     describe('getExpiresIn', () => {
         it('should calculate remaining time correctly (returns seconds)', () => {
             const session = createSession();
-            (session as any).setTokenDetails({ ...mockTokenDetails, expires_in: 900 });
-            expect(session.getExpiresIn()).toBe(900);
+            const ttl = 900;
+            (session as any).exp_ = Math.floor(Date.now() / 1000) + ttl;
+            expect((session as any).getExpiresIn()).toBe(ttl);
         });
 
         it('should return a negative value if expires_in is missing or invalid', () => {
             const session = createSession();
 
             (session as any).setTokenDetails({ ...mockTokenDetails, expires_in: undefined } as any);
-            expect(session.getExpiresIn()).toBeLessThan(0);
+            expect((session as any).getExpiresIn()).toBeLessThan(0);
 
             (session as any).setTokenDetails({ ...mockTokenDetails, expires_in: null } as any);
-            expect(session.getExpiresIn()).toBeLessThan(0);
+            expect((session as any).getExpiresIn()).toBeLessThan(0);
         });
     });
 
@@ -778,6 +779,170 @@ describe('SessionCore', () => {
 
             await expect(session.authFetch('https://resource.example/data'))
                 .rejects.toThrow('Network error');
+        });
+    });
+
+    // --- Event Handling and Callbacks Tests ---
+    describe('Event Handling and Callbacks', () => {
+        // Helper to let promise chains in the SUT resolve fully
+        const flushPromises = () => new Promise(resolve => setTimeout(resolve, 0));
+
+        // 1. Test the new EventTarget interface
+        it('should dispatch STATE_CHANGE event when login succeeds', async () => {
+            const listener = jest.fn();
+            const session = createSession();
+            session.addEventListener(SessionEvents.STATE_CHANGE, listener);
+
+            (AuthCodeGrant.onIncomingRedirect as jest.Mock).mockResolvedValueOnce(mockSessionInfo);
+            await session.handleRedirectFromLogin();
+
+            expect(listener).toHaveBeenCalledTimes(1);
+            expect(listener).toHaveBeenCalledWith(expect.any(CustomEvent));
+        });
+
+        it('should dispatch STATE_CHANGE event when restore changes state from inactive to active', async () => {
+            const listener = jest.fn();
+            const session = createSession();
+            session.addEventListener(SessionEvents.STATE_CHANGE, listener);
+            expect(session.isActive).toBe(false);
+
+            (RefreshGrant.renewTokens as jest.Mock).mockResolvedValueOnce(mockTokenDetails);
+            await session.restore();
+            await flushPromises(); // The event is dispatched in a .finally() block
+
+            expect(session.isActive).toBe(true);
+            expect(listener).toHaveBeenCalledTimes(1);
+        });
+
+        it('should dispatch STATE_CHANGE event on logout', async () => {
+            const listener = jest.fn();
+            const session = createSession();
+            await activateSession(session); // Start with an active session
+            session.addEventListener(SessionEvents.STATE_CHANGE, listener);
+
+            await session.logout();
+
+            expect(listener).toHaveBeenCalledTimes(1);
+        });
+
+        it('should NOT dispatch STATE_CHANGE event when restore succeeds but state does not change', async () => {
+            const listener = jest.fn();
+            const session = createSession();
+            await activateSession(session); // Session is already active
+            session.addEventListener(SessionEvents.STATE_CHANGE, listener);
+
+            (RefreshGrant.renewTokens as jest.Mock).mockResolvedValueOnce(mockTokenDetails);
+            await session.restore();
+            await flushPromises();
+
+            // State didn't change (was active, is still active)
+            expect(listener).not.toHaveBeenCalled();
+        });
+
+        it('should NOT dispatch STATE_CHANGE event if handleRedirectFromLogin returns no tokens', async () => {
+            const listener = jest.fn();
+            const session = createSession();
+            session.addEventListener(SessionEvents.STATE_CHANGE, listener);
+
+            (AuthCodeGrant.onIncomingRedirect as jest.Mock).mockResolvedValueOnce({
+                clientDetails: mockClientDetails // No tokens
+            });
+            await session.handleRedirectFromLogin();
+
+            expect(listener).not.toHaveBeenCalled();
+        });
+
+        // 2. Test for backward compatibility with the old callback
+        it('should call the legacy onSessionStateChange callback on successful login', async () => {
+            const legacyCallback = jest.fn();
+            const session = createSession(mockClientDetails, {
+                database: mockDb,
+                onSessionStateChange: legacyCallback
+            });
+
+            (AuthCodeGrant.onIncomingRedirect as jest.Mock).mockResolvedValueOnce(mockSessionInfo);
+            await session.handleRedirectFromLogin();
+
+            expect(legacyCallback).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    // ADD this new test block to your SessionCore.test.ts file
+
+    // --- Event Payload Tests ---
+    describe('Event Payloads (detail property)', () => {
+        it('should dispatch STATE_CHANGE with correct detail on successful login', async () => {
+            const listener = jest.fn();
+            const session = createSession();
+            session.addEventListener(SessionEvents.STATE_CHANGE, listener);
+
+            (AuthCodeGrant.onIncomingRedirect as jest.Mock).mockResolvedValueOnce(mockSessionInfo);
+            await session.handleRedirectFromLogin();
+
+            expect(listener).toHaveBeenCalledTimes(1);
+            const event = listener.mock.calls[0][0] as CustomEvent;
+            expect(event.detail).toEqual({
+                isActive: true,
+                webId: 'https://alice.example/card#me',
+            });
+        });
+
+        it('should dispatch STATE_CHANGE with correct detail on logout', async () => {
+            const listener = jest.fn();
+            const session = createSession();
+            await activateSession(session); // Start active
+            session.addEventListener(SessionEvents.STATE_CHANGE, listener);
+
+            await session.logout();
+
+            expect(listener).toHaveBeenCalledTimes(1);
+            const event = listener.mock.calls[0][0] as CustomEvent;
+            expect(event.detail).toEqual({
+                isActive: false,
+                webId: undefined,
+            });
+        });
+
+        it('should dispatch EXPIRATION_WARNING with correct detail when refresh fails for an active, unexpired session', async () => {
+            const listener = jest.fn();
+            const session = createSession();
+            await activateSession(session); // Start active
+            session.addEventListener(SessionEvents.EXPIRATION_WARNING, listener);
+
+            // Mock the session to be unexpired but have a known TTL
+            jest.spyOn(session, 'isExpired').mockReturnValue(false);
+            jest.spyOn(session, 'getExpiresIn').mockReturnValue(900);
+            (RefreshGrant.renewTokens as jest.Mock).mockRejectedValueOnce(new Error('Network Down'));
+
+            // Restore will fail, triggering the warning
+            await expect(session.restore()).rejects.toThrow();
+            await flushPromises();
+
+            expect(listener).toHaveBeenCalledTimes(1);
+            const event = listener.mock.calls[0][0] as CustomEvent;
+            expect(event.detail).toEqual({
+                expires_in: 900,
+            });
+        });
+
+        it('should dispatch EXPIRATION with null detail when refresh fails for an active, expired session', async () => {
+            const listener = jest.fn();
+            const session = createSession();
+            await activateSession(session); // Start active
+            session.addEventListener(SessionEvents.EXPIRATION, listener);
+
+            // Mock the session to be expired
+            jest.spyOn(session, 'isExpired').mockReturnValue(true);
+            (RefreshGrant.renewTokens as jest.Mock).mockRejectedValueOnce(new Error('Network Down'));
+
+            // Restore will fail, triggering the expiration event
+            await expect(session.restore()).rejects.toThrow();
+            await flushPromises();
+
+            expect(listener).toHaveBeenCalledTimes(1);
+            const event = listener.mock.calls[0][0] as CustomEvent;
+            // The event is dispatched with no detail payload
+            expect(event.detail).toBeNull();
         });
     });
 });

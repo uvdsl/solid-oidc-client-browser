@@ -7,8 +7,6 @@ import { SessionIDB } from './SessionDatabase';
 // Any provided database via SessionOptions will be ignored.
 // Database will be an IndexedDB.
 export interface WebWorkerSessionOptions extends SessionOptions {
-    onSessionExpirationWarning?: () => void;
-    onSessionExpiration?: () => void;
     workerUrl?: string | URL;
 }
 
@@ -18,9 +16,6 @@ export interface WebWorkerSessionOptions extends SessionOptions {
 export class WebWorkerSession extends SessionCore {
     private worker: SharedWorker;
 
-    private onSessionExpirationWarning?: () => void;
-    private onSessionExpiration?: () => void;
-
     constructor(
         clientDetails?: DereferencableIdClientDetails | DynamicRegistrationClientDetails,
         sessionOptions?: WebWorkerSessionOptions
@@ -28,8 +23,6 @@ export class WebWorkerSession extends SessionCore {
         const database = new SessionIDB();
         const options = { ...sessionOptions, database };
         super(clientDetails, options);
-        this.onSessionExpirationWarning = sessionOptions?.onSessionExpirationWarning;
-        this.onSessionExpiration = sessionOptions?.onSessionExpiration;
 
         // Allow consumer to provide worker URL, or use default
         const workerUrl = sessionOptions?.workerUrl ?? getWorkerUrl()
@@ -49,7 +42,7 @@ export class WebWorkerSession extends SessionCore {
                 const wasActive = this.isActive;
                 await this.setTokenDetails(payload.tokenDetails);
                 if (wasActive !== this.isActive)
-                    this.onSessionStateChange?.();
+                    this.dispatchStateChangeEvent();
                 if (this.refreshPromise && this.resolveRefresh) {
                     this.resolveRefresh();
                     this.clearRefreshPromise();
@@ -57,7 +50,7 @@ export class WebWorkerSession extends SessionCore {
                 break;
             case RefreshMessageTypes.ERROR_ON_REFRESH:
                 if (this.isActive)
-                    this.onSessionExpirationWarning?.();
+                    this.dispatchExpirationWarningEvent();
                 if (this.refreshPromise && this.rejectRefresh) {
                     if (this.isActive) {
                         this.rejectRefresh(new Error(error || 'Token refresh failed'));
@@ -69,7 +62,7 @@ export class WebWorkerSession extends SessionCore {
                 break;
             case RefreshMessageTypes.EXPIRED:
                 if (this.isActive) {
-                    this.onSessionExpiration?.();
+                    this.dispatchExpirationEvent();
                     await this.logout();
                 }
                 if (this.refreshPromise && this.rejectRefresh) {
@@ -84,7 +77,10 @@ export class WebWorkerSession extends SessionCore {
     async handleRedirectFromLogin() {
         await super.handleRedirectFromLogin();
         if (this.isActive) { // If login was successful, tell the worker to schedule refreshing
-            this.worker.port.postMessage({ type: RefreshMessageTypes.SCHEDULE, payload: this.getTokenDetails() });
+            this.worker.port.postMessage({
+                type: RefreshMessageTypes.SCHEDULE,
+                payload: { ...this.getTokenDetails(), expires_in: this.getExpiresIn() }
+            });
         }
     }
 
