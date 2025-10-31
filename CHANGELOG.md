@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-If you have any questions, see the issues and discussions (e.g. #18)
+If you have any questions, see the issues and discussions (e.g. [#18](https://github.com/uvdsl/solid-oidc-client-browser/issues/18))
 
 ## [Unreleased]
 
@@ -22,7 +22,7 @@ If you have any questions, see the issues and discussions (e.g. #18)
 
 - For backward compatibility, the original `onSessionStateChange`, `onSessionExpirationWarning`, and `onSessionExpiration` callbacks in SessionOptions are now powered by the new EventTarget system.
 
-(Changes based on Pull Request #20, addresses #19)
+(Changes based on Pull Request [#20](https://github.com/uvdsl/solid-oidc-client-browser/issues/20), addresses [#19](https://github.com/uvdsl/solid-oidc-client-browser/issues/19))
 
 ## [0.2.0] - 2025-10-29
 
@@ -36,7 +36,7 @@ If you have any questions, see the issues and discussions (e.g. #18)
 
 ### 🐛 Fixed
 
-- **Reliable Token Refresh**: The new SharedWorker architecture ensures that tokens are reliably refreshed even when tabs are inactive or hibernating, resolving issues where sessions would become stale. (Fixes #13).
+- **Reliable Token Refresh**: The new SharedWorker architecture ensures that tokens are reliably refreshed even when tabs are inactive or hibernating, resolving issues where sessions would become stale. (Fixes [#13](https://github.com/uvdsl/solid-oidc-client-browser/issues/13)).
 
 ### ✨ Features (Added)
 
@@ -44,27 +44,27 @@ If you have any questions, see the issues and discussions (e.g. #18)
 
 ### ⚠️ Important Notes
 
-- **Framework Reactivity**: While this version introduces no breaking API changes, the move to a SharedWorker for token refreshing (to fix cross-tab and hibernation issues) may affect reactivity in frameworks like Vue or React. Because the worker runs in a separate thread, changes to the session object (like token refreshes) may not be automatically detected by your framework's reactivity system. To fix this, please use the `onSessionStateChange` callback in SessionOptions to manually update your application's state. See the Vue Usage Example for a recommended pattern. Please also note that a corresponding issue has already been raised (#19).
+- **Framework Reactivity**: While this version introduces no breaking API changes, the move to a SharedWorker for token refreshing (to fix cross-tab and hibernation issues) may affect reactivity in frameworks like Vue or React. Because the worker runs in a separate thread, changes to the session object (like token refreshes) may not be automatically detected by your framework's reactivity system. To fix this, please use the `onSessionStateChange` callback in SessionOptions to manually update your application's state. See the Vue Usage Example for a recommended pattern. Please also note that a corresponding issue has already been raised ([#19](https://github.com/uvdsl/solid-oidc-client-browser/issues/19)).
 
-(Changes based on Pull Request #17)
+(Changes based on Pull Request [#17](https://github.com/uvdsl/solid-oidc-client-browser/issues/17))
 
 ## [0.1.3] - 2025-10-20
 
 ### 🐛 Fixed
 
-- **DPoP ath Mismatch**: Fixed a critical bug where the access token hash (ath) was not being recalculated after a token refresh. This caused all subsequent authenticated requests to fail with a 401 Unauthorized error. (Fixes #16)
+- **DPoP ath Mismatch**: Fixed a critical bug where the access token hash (ath) was not being recalculated after a token refresh. This caused all subsequent authenticated requests to fail with a 401 Unauthorized error. (Fixes [#16](https://github.com/uvdsl/solid-oidc-client-browser/issues/16))
 
 ## [0.1.2] - 2025-09-23
 
 ### 🐛 Fixed
 
-- Relaxes validation for Identity Provider (IdP) URL input to better handle variations. (Fixes #15, also related to #10)
+- Relaxes validation for Identity Provider (IdP) URL input to better handle variations. (Fixes [#15](https://github.com/uvdsl/solid-oidc-client-browser/issues/15), also related to [#10](https://github.com/uvdsl/solid-oidc-client-browser/issues/10))
 
 ## [0.1.1] - 2025-08-01
 
 ### 🐛 Fixed
 
-- Resolves an issue related to session restoration logic. (Fixes #11)
+- Resolves an issue related to session restoration logic. (Fixes [#11](https://github.com/uvdsl/solid-oidc-client-browser/issues/11))
 
 ## [0.1.0] - 2025-05-19
 
@@ -100,15 +100,15 @@ If you have any questions, see the issues and discussions (e.g. #18)
 
 - Uses IndexedDB to store the non-extractable DPoP KeyPair, which is now correctly remembered for use in the RefreshTokenGrant.
 
-- Sets `token_endpoint_auth_method` to `none` for public clients during RefreshTokenGrant, as required by the spec. (Addresses #6 via Pull Request #9)
+- Sets `token_endpoint_auth_method` to `none` for public clients during RefreshTokenGrant, as required by the spec. (Addresses [#6](https://github.com/uvdsl/solid-oidc-client-browser/issues/6) via Pull Request [#9](https://github.com/uvdsl/solid-oidc-client-browser/issues/9))
 
 ## [0.0.8] - 2025-05-02
 
 ### 🐛 Fixed
 
-- **Token Rotation**: Ensured that the new `refresh_token` is correctly saved after a successful token refresh. (Pull Request #5)
+- **Token Rotation**: Ensured that the new `refresh_token` is correctly saved after a successful token refresh. (Pull Request [#5](https://github.com/uvdsl/solid-oidc-client-browser/issues/5))
 
-- **Hotfix**: Corrects the handling of the Identity Provider (IdP) URL during OIDC configuration discovery and `iss` (issuer) validation. (Fixes #8)
+- **Hotfix**: Corrects the handling of the Identity Provider (IdP) URL during OIDC configuration discovery and `iss` (issuer) validation. (Fixes [#8](https://github.com/uvdsl/solid-oidc-client-browser/issues/8))
 
 ## [0.0.7] - 2025-04-22
 
@@ -128,11 +128,11 @@ If you have any questions, see the issues and discussions (e.g. #18)
 
 ### ✨ Features (Added)
 
-- Added validation for `id_token` and `access_token` claims (e.g., `iss`, `aud`, DPoP `jkt`). (Fixes #2)
+- Added validation for `id_token` and `access_token` claims (e.g., `iss`, `aud`, DPoP `jkt`). (Fixes [#2](https://github.com/uvdsl/solid-oidc-client-browser/issues/2))
 
 ### 🐛 Fixed
 
-- Fixed incorrect error logging for the state check (CSRF protection) during the authorization code flow. (Fixes #1)
+- Fixed incorrect error logging for the state check (CSRF protection) during the authorization code flow. (Fixes [#1](https://github.com/uvdsl/solid-oidc-client-browser/issues/1))
 
 ## [0.0.4] - 2025-04-18
 
