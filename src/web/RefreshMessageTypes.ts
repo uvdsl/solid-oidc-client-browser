@@ -1,0 +1,9 @@
+export enum RefreshMessageTypes {
+    SCHEDULE = 'SCHEDULE',
+    REFRESH = 'REFRESH',
+    STOP = 'STOP',
+    DISCONNECT = 'DISCONNECT',
+    TOKEN_DETAILS = 'TOKEN_DETAILS',
+    ERROR_ON_REFRESH = 'ERROR_ON_REFRESH',
+    EXPIRED = 'EXPIRED'
+}

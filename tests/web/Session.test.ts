@@ -1,6 +1,6 @@
 import { WebWorkerSession, WebWorkerSessionOptions } from '../../src/web/Session';
 import { SessionCore, SessionEvents } from '../../src/core/Session';
-import { RefreshMessageTypes } from '../../src/web/RefreshWorker';
+import { RefreshMessageTypes } from '../../src/web/RefreshMessageTypes';
 import { SessionIDB } from '../../src/web/SessionDatabase';
 import { TokenDetails } from '../../src/core/SessionInformation';
 
