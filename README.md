@@ -32,16 +32,8 @@ There is API documentation available in the [wiki](https://github.com/uvdsl/soli
 npm install @uvdsl/solid-oidc-client-browser
 ```
 
-#### Deprecated: via a CDN provider
-The default `web` version of this library uses a web worker, which cannot be loaded cross-domain. The latest CDN-compatible version is `0.1.3` - for an out-of-the-box experience:
-```html
-<script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.1.3/dist/esm/index.min.js"></script>
-```
-For newer versions via CDN, use the `core` version (requires manual refresh lifecycle management):
-```html
-<script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.2.0/dist/esm/core/index.min.js"></script>
-```
-See the [wiki](https://github.com/uvdsl/solid-oidc-client-browser/wiki/API-Reference#using-the-core-library-for-extensions-and-custom-setups) for core library documentation.
+#### via a CDN provider? Strongly discouraged!
+Please consider the security of your project! See also the [wiki](https://github.com/uvdsl/solid-oidc-client-browser/wiki/Security-Considerations#cdn-usage).
 
 ## Quick Start
 
