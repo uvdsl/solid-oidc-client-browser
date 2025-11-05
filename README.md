@@ -32,117 +32,46 @@ There is API documentation available in the [wiki](https://github.com/uvdsl/soli
 npm install @uvdsl/solid-oidc-client-browser
 ```
 
-#### via a CDN provider
-You can also include the library directly in your HTML. The default export is the `web` version, which includes the background refresh worker.
+#### Deprecated: via a CDN provider
+The default `web` version of this library uses a web worker, which cannot be loaded cross-domain. The latest CDN-compatible version is `0.1.3` - for an out-of-the-box experience:
 ```html
 <script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.1.3/dist/esm/index.min.js"></script>
 ```
-
-Please note that loading web worker files cross domain is not allowed. Therefore, the latest version working via cdn is `0.1.3`.
-Alternatively, look into using the `core` version of this library.
+For newer versions via CDN, use the `core` version (requires manual refresh lifecycle management):
+```html
+<script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.2.0/dist/esm/core/index.min.js"></script>
+```
+See the [wiki](https://github.com/uvdsl/solid-oidc-client-browser/wiki/API-Reference#using-the-core-library-for-extensions-and-custom-setups) for core library documentation.
 
 ## Quick Start
 
 You can use this library along the lines of the following example.
-For other usage examples, including usage with framework Vue or a mutli-page application, see the [wiki](https://github.com/uvdsl/solid-oidc-client-browser/wiki/Usage-Examples).
+For advanced usage examples, including usage with framework Vue or a multi-page application, see the [wiki](https://github.com/uvdsl/solid-oidc-client-browser/wiki/Usage-Examples).
 
-#### in a simple HTML page with JavaScript
+```ts
+import { Session } from '@uvdsl/solid-oidc-client-browser';
 
-```html
-<!DOCTYPE html>
-<html lang="en">
+// Create a session
+const session = new Session({
+  redirect_uris: [window.location.href],
+  client_name: "My Solid App"
+});
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solid Login Page</title>
-    <script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.1.3/dist/esm/index.min.js"></script>
-</head>
+// Try to establish a session
+// after user login redirect
+await session.handleRedirectFromLogin();
+// or from a previous session
+await session.restore();
 
-<body>
-    <div class="container">
-        <h1>Solid Login Demo</h1>
-        <p>Click the button below to log in with your Solid identity provider (solidcommunity.net)</p>
-        <p id="welcome-message">Welcome to the application</p>
-        <div id="user-info" class="user-info">
-            <p>WebID: <span id="webid">not logged in.</span></p>
-        </div>
-        <button id="loginButton">Login with Solid</button>
-        <button id="logoutButton">Logout</button>
-    </div>
+if (session.isActive) {
+  console.log(`Welcome back, ${session.webId}!`);
+} else {
+  // Redirect to login
+  await session.login('https://solidcommunity.net/', window.location.href);
+}
 
-    <script>
-       // Initialize the session
-        let session;
-
-        document.addEventListener('DOMContentLoaded', async () => {
-            const module = await import('https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.1.3/dist/esm/index.min.js');
-            const Session = module.Session;
-
-            const sessionOptions = {
-                onSessionExpirationWarning: () => {
-                    console.warn("Session state changed!");
-                },
-                onSessionExpirationWarning: () => {
-                    console.warn("Session is about to expire!");
-                    document.getElementById('welcome-message').textContent = "Warning: Session is expiring soon.";
-                },
-                onSessionExpiration: () => {
-                    console.warn("Session is expired!");
-                    document.getElementById('webid').textContent = "not logged in.";
-                    document.getElementById('welcome-message').textContent =
-                        "You're not logged in.";
-                }
-            };
-
-            // Create a new session
-            const clientDetails  = {
-                redirect_uris: [window.location.href],
-                client_name: "uvdsl's Solid App Template"
-            };
-            session = new Session(clientDetails, sessionOptions);
-
-
-            // Set up the login button
-            document.getElementById('loginButton').addEventListener('click', () => {
-                const idp = "https://solidcommunity.net/";
-                const redirect_uri = window.location.href; // The URL of this page
-                session.login(idp, redirect_uri);
-            });
-
-            // Set up the logout button
-            document.getElementById('logoutButton').addEventListener('click', () => {
-                session.logout();
-                document.getElementById('webid').textContent = "not logged in.";
-                document.getElementById('welcome-message').textContent =
-                    "You're not logged in.";
-            });
-
-            // Handle page revisit
-            try {
-                // either: handle redirect after login
-                await session.handleRedirectFromLogin();
-                // or: try to restore the session
-                await session.restore().catch(e => console.log(e.message));
-
-                if (session.webId) {
-                    document.getElementById('webid').textContent = session.webId;
-                    document.getElementById('welcome-message').textContent =
-                        `Welcome! You are logged in.`;
-                } else {
-                    document.getElementById('welcome-message').textContent =
-                        "You're not logged in.";
-                }
-            } catch (error) {
-                console.error("Error restoring session:", error);
-                document.getElementById('welcome-message').textContent =
-                    "Error restoring session. Please try logging in again.";
-            }
-        });
-    </script>
-</body>
-
-</html>
+// Make authenticated requests
+const response = await session.authFetch('https://your.pod/private-resource');
 ```
 
 #### After logging in ...
@@ -193,7 +122,7 @@ This is a problem from a security perspective: If a resource on a Solid Pod has 
 
 Therefore, I would like to suggest to adhere to the origin-centered security perspective that aligns with the browsers' security mechanisms.
 
-If you want to serve multiple Solid Apps under the same origin, I'd suggest you consider this composition one mutli-page app with one overreaching `client_id`. This way, it is explicit that the different Solid Apps are really just one compositional app living in the same security context / within the same security boundaries enforced by the browser.
+If you want to serve multiple Solid Apps under the same origin, I'd suggest you consider this composition one multi-page app with one overreaching `client_id`. This way, it is explicit that the different Solid Apps are really just one compositional app living in the same security context / within the same security boundaries enforced by the browser.
 
 If you think that the two Solid Apps should still have distinct `client_id`, then I strongly suggest you consider the browsers' security mechansims, and thus see that the two disinct Solid Apps would live in the same security context, and thus exhibit a security issue. Therefore, I would strongly recommend in this case to consider serving the two Solid Apps from distinct origins - which aligns the conceptual model of distinct apps with the security model of the browsers: each distinct Solid App / client thus resides in its distinct security context. See also this [comment](https://github.com/uvdsl/solid-oidc-client-browser/issues/3#issuecomment-2841667805) for more details.
 
