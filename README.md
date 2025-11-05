@@ -76,7 +76,7 @@ For other usage examples, including usage with framework Vue or a mutli-page app
         let session;
 
         document.addEventListener('DOMContentLoaded', async () => {
-            const module = await import('https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.2.0/dist/esm/web/index.min.js');
+            const module = await import('https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.1.3/dist/esm/index.min.js');
             const Session = module.Session;
 
             const sessionOptions = {
