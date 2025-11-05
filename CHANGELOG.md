@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 If you have any questions, see the issues and discussions (e.g. [#18](https://github.com/uvdsl/solid-oidc-client-browser/issues/18))
 
-## [Unreleased]
+## [0.2.1] - 2025-11-05
 
 ### ✨ Features (Added)
 
@@ -17,6 +17,10 @@ If you have any questions, see the issues and discussions (e.g. [#18](https://gi
   - **EXPIRATION_WARNING**: Fires when automatic token refresh fails, but the session is not yet expired. Event detail includes `{ expires_in: number }`.
 
   - **EXPIRATION**: Fires when the session has definitively expired.
+
+### 🐛 Fixed
+
+- **Side-effect-free imports**: Server-side rendering does not longer trigger execution of web worker code. (Fixes [#21](https://github.com/uvdsl/solid-oidc-client-browser/issues/21)).
 
 ### ⚙️ Changed
 
