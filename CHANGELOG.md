@@ -18,15 +18,15 @@ If you have any questions, see the issues and discussions (e.g. [#18](https://gi
 
   - **EXPIRATION**: Fires when the session has definitively expired.
 
-### 🐛 Fixed
-
-- **Side-effect-free imports**: Server-side rendering does not longer trigger execution of web worker code. (Fixes [#21](https://github.com/uvdsl/solid-oidc-client-browser/issues/21)).
-
 ### ⚙️ Changed
 
 - For backward compatibility, the original `onSessionStateChange`, `onSessionExpirationWarning`, and `onSessionExpiration` callbacks in SessionOptions are now powered by the new EventTarget system.
 
 (Changes based on Pull Request [#20](https://github.com/uvdsl/solid-oidc-client-browser/issues/20), addresses [#19](https://github.com/uvdsl/solid-oidc-client-browser/issues/19))
+
+### 🐛 Fixed
+
+- **Side-effect-free imports**: Server-side rendering does not longer trigger execution of web worker code. (Fixes [#21](https://github.com/uvdsl/solid-oidc-client-browser/issues/21)).
 
 ## [0.2.0] - 2025-10-29
 
@@ -49,6 +49,8 @@ If you have any questions, see the issues and discussions (e.g. [#18](https://gi
 ### ⚠️ Important Notes
 
 - **Framework Reactivity**: While this version introduces no breaking API changes, the move to a SharedWorker for token refreshing (to fix cross-tab and hibernation issues) may affect reactivity in frameworks like Vue or React. Because the worker runs in a separate thread, changes to the session object (like token refreshes) may not be automatically detected by your framework's reactivity system. To fix this, please use the `onSessionStateChange` callback in SessionOptions to manually update your application's state. See the Vue Usage Example for a recommended pattern. Please also note that a corresponding issue has already been raised ([#19](https://github.com/uvdsl/solid-oidc-client-browser/issues/19)).
+
+- **CDN support**: Loading a web worker via CDN is not allowed. Currently, the best option for CDN is to keep using version `0.1.3`.
 
 (Changes based on Pull Request [#17](https://github.com/uvdsl/solid-oidc-client-browser/issues/17))
 
