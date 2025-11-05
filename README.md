@@ -35,10 +35,11 @@ npm install @uvdsl/solid-oidc-client-browser
 #### via a CDN provider
 You can also include the library directly in your HTML. The default export is the `web` version, which includes the background refresh worker.
 ```html
-<script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.2.0/dist/esm/web/index.min.js"></script>
+<script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.1.3/dist/esm/index.min.js"></script>
 ```
 
-Do not forget to adjust the version to the one you want! The latest version is displayed at the top of the README in the `npm` badge.
+Please note that loading web worker files cross domain is not allowed. Therefore, the latest version working via cdn is `0.1.3`.
+Alternatively, look into using the `core` version of this library.
 
 ## Quick Start
 
@@ -55,7 +56,7 @@ For other usage examples, including usage with framework Vue or a mutli-page app
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Solid Login Page</title>
-    <script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.2.0/dist/esm/web/index.min.js"></script>
+    <script type="module" src="https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.1.3/dist/esm/index.min.js"></script>
 </head>
 
 <body>
