@@ -3,16 +3,7 @@ import { renewTokens } from "../core/RefreshTokenGrant";
 import { TokenDetails } from "../core/SessionInformation";
 import { SessionIDB } from "./SessionDatabase";
 import { SessionDatabase } from "../core/SessionDatabase";
-
-export enum RefreshMessageTypes {
-    SCHEDULE = 'SCHEDULE',
-    REFRESH = 'REFRESH',
-    STOP = 'STOP',
-    DISCONNECT = 'DISCONNECT',
-    TOKEN_DETAILS = 'TOKEN_DETAILS',
-    ERROR_ON_REFRESH = 'ERROR_ON_REFRESH',
-    EXPIRED = 'EXPIRED'
-}
+import { RefreshMessageTypes } from "./RefreshMessageTypes";
 
 interface SharedWorker { // to make tsc happy
     onconnect: (event: MessageEvent) => void;

@@ -1,4 +1,5 @@
-import { Refresher, RefreshMessageTypes } from '../../src/web/RefreshWorker';
+import { Refresher } from '../../src/web/RefreshWorker';
+import { RefreshMessageTypes } from '../../src/web/RefreshMessageTypes';
 import * as RefreshGrant from '../../src/core/RefreshTokenGrant';
 import * as jose from 'jose';
 import { SessionDatabase } from '../../src/core/SessionDatabase';

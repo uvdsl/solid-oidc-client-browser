@@ -1,7 +1,7 @@
 import { DereferencableIdClientDetails, DynamicRegistrationClientDetails } from '../core';
 import { SessionOptions, SessionCore } from '../core/Session';
 import { getWorkerUrl } from './RefreshWorkerUrl';
-import { RefreshMessageTypes } from './RefreshWorker';
+import { RefreshMessageTypes } from './RefreshMessageTypes';
 import { SessionIDB } from './SessionDatabase';
 
 // Any provided database via SessionOptions will be ignored.
