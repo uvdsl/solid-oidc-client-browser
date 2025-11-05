@@ -45,8 +45,8 @@ See the [wiki](https://github.com/uvdsl/solid-oidc-client-browser/wiki/API-Refer
 
 ## Quick Start
 
-You can use this library along the lines of the following example.
-For advanced usage examples, including usage with Vue or React, see the [wiki](https://github.com/uvdsl/solid-oidc-client-browser/wiki/Usage-Examples).
+For advanced usage examples, including Vue or React, see the [wiki](https://github.com/uvdsl/solid-oidc-client-browser/wiki/Usage-Examples).
+Here, a minimal example:
 
 ```ts
 import { Session } from '@uvdsl/solid-oidc-client-browser';
