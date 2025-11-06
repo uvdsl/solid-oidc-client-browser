@@ -361,7 +361,7 @@ export class SessionCore extends EventTarget implements Session {
     );
     return new SignJWT(payload)
       .setIssuedAt()
-      .setJti(window.crypto.randomUUID())
+      .setJti(globalThis.crypto.randomUUID())
       .setProtectedHeader({
         alg: "ES256",
         typ: "dpop+jwt",

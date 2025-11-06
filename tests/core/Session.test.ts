@@ -59,7 +59,7 @@ describe('SessionCore', () => {
         (session as any).information = { ...mockSessionInfo };
         (session as any).information.clientDetails.client_id = client_id;
 
-        // 2. Mock the internal _computeAth method, as it depends on `window.crypto`
+        // 2. Mock the internal _computeAth method, as it depends on `globalThis.crypto`
         // which is not available in the JSDOM test environment.
         const computeAthSpy = jest.spyOn(session as any, '_computeAth')
             .mockResolvedValueOnce('mock-ath-value');
