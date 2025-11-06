@@ -74,7 +74,7 @@ const redirectForLogin = async (idp: string, redirect_uri: string, client_detail
   sessionStorage.setItem("pkce_code_verifier", pkce_code_verifier);
 
   // RFC 6749 OAuth 2.0 - CSRF token
-  const csrf_token = window.crypto.randomUUID();
+  const csrf_token = globalThis.crypto.randomUUID();
   sessionStorage.setItem("csrf_token", csrf_token);
 
   // redirect to idp
@@ -99,10 +99,10 @@ const redirectForLogin = async (idp: string, redirect_uri: string, client_detail
 const getPKCEcode = async () => {
   // create random string as PKCE code verifier
   const pkce_code_verifier =
-    window.crypto.randomUUID() + "-" + window.crypto.randomUUID();
+    globalThis.crypto.randomUUID() + "-" + globalThis.crypto.randomUUID();
   // hash the verifier and base64URL encode as PKCE code challenge
   const digest = new Uint8Array(
-    await window.crypto.subtle.digest(
+    await globalThis.crypto.subtle.digest(
       "SHA-256",
       new TextEncoder().encode(pkce_code_verifier)
     )
@@ -277,7 +277,7 @@ const requestAccessToken = async (
     htm: "POST",
   })
     .setIssuedAt()
-    .setJti(window.crypto.randomUUID())
+    .setJti(globalThis.crypto.randomUUID())
     .setProtectedHeader({
       alg: "ES256",
       typ: "dpop+jwt",
