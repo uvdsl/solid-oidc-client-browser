@@ -125,7 +125,7 @@ const onIncomingRedirect = async (client_details?: ClientDetails, database?: Ses
   const authorization_code = url.searchParams.get("code");
   // if no code, session remains unauthenticated at this point
   if (authorization_code === null) {
-    return { clientDetails: client_details } as SessionInformation;;
+    return { clientDetails: client_details } as SessionInformation;
   }
   // RFC 9207 issuer check
   const idp = sessionStorage.getItem("idp");
