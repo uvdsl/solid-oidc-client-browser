@@ -555,6 +555,23 @@ describe('SessionCore', () => {
                 expect(session.isActive).toBe(true);
             });
         });
+        describe('session binding', () => {
+            it('should preserve context and successfully inject tokens when detached', async () => {
+                const session = createSession();
+                await activateSession(session); // Now this.isActive === true
+                // Detach the method completely
+                const detachedFetch = session.authFetch;
+                // Call the detached method (If unbound, this crashes immediately)
+                await detachedFetch('https://resource.example/data');
+                // Verify it didn't crash AND it successfully accessed 'this.information' 
+                // and 'this._createSignedDPoPToken()' to build the headers.
+                expect(fetch).toHaveBeenCalledTimes(1);
+                const [, options] = (fetch as jest.Mock).mock.calls[0];
+                const headers = options.headers as Headers;
+                expect(headers.get('authorization')).toBe(`DPoP ${mockTokenDetails.access_token}`);
+                expect(headers.get('dpop')).toBe('mocked.dpop.token'); // Assuming SignJWT is mocked to return this
+            });
+        });
     });
 
     // --- setTokenDetails Tests ---
