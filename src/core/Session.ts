@@ -102,6 +102,7 @@ export class SessionCore extends EventTarget implements Session {
 
   constructor(clientDetails?: DereferencableIdClientDetails | DynamicRegistrationClientDetails, sessionOptions?: SessionOptions) {
     super();
+    this.authFetch = this.authFetch.bind(this);
     this.information = { clientDetails } as SessionInformation;
     this.database = sessionOptions?.database
     if (sessionOptions?.onSessionStateChange)
