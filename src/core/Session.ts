@@ -1,5 +1,5 @@
 import { SignJWT, decodeJwt, exportJWK } from "jose";
-import { redirectForLogin, onIncomingRedirect } from "./AuthorizationCodeGrant";
+import { redirectForLogin, fedCMLogin, onIncomingRedirect } from "./AuthorizationCodeGrant";
 import { renewTokens } from "./RefreshTokenGrant";
 import { SessionDatabase } from "./SessionDatabase";
 import { DynamicRegistrationClientDetails, DereferencableIdClientDetails, SessionInformation, TokenDetails } from "./SessionInformation";
@@ -117,6 +117,11 @@ export class SessionCore extends EventTarget implements Session {
     await redirectForLogin(idp, redirect_uri, this.information.clientDetails)
   }
 
+  async fedCM() {
+    const newSessionInfo = await fedCMLogin(this.information.clientDetails, this.database)
+    await this.handleLogin(newSessionInfo)
+  }
+
   /**
    * Handles the redirect from the identity provider after a login attempt.
    * It attempts to retrieve tokens using the authorization code.
@@ -126,14 +131,19 @@ export class SessionCore extends EventTarget implements Session {
   async handleRedirectFromLogin() {
     // Redirect after Authorization Code Grant // memory via sessionStorage
     const newSessionInfo = await onIncomingRedirect(this.information.clientDetails, this.database);
+    await this.handleLogin(newSessionInfo)
+  }
+
+  async handleLogin(sessionInfo: SessionInformation) {
     // no session - we remain unauthenticated
-    if (!newSessionInfo.tokenDetails) return;
+    if (!sessionInfo.tokenDetails) return;
     // we got a session
-    this.information.clientDetails = newSessionInfo.clientDetails
-    this.information.idpDetails = newSessionInfo.idpDetails;
-    await this.setTokenDetails(newSessionInfo.tokenDetails)
+    this.information.clientDetails = sessionInfo.clientDetails
+    this.information.idpDetails = sessionInfo.idpDetails;
+    await this.setTokenDetails(sessionInfo.tokenDetails)
     // callback state change 
     this.dispatchStateChangeEvent(); // we logged in
+
   }
 
   /**

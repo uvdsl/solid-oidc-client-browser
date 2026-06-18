@@ -3,18 +3,55 @@ import { requestDynamicClientRegistration } from "./DynamicClientRegistration";
 import { ClientDetails, DynamicRegistrationClientDetails, IdentityProviderDetails, SessionInformation, TokenDetails } from "./SessionInformation";
 import { SessionDatabase } from "./SessionDatabase";
 
-/**
- * Login with the idp, using a provided `client_id` or dynamic client registration if none provided.
- *
- * @param idp
- * @param redirect_uri
- */
-const redirectForLogin = async (idp: string, redirect_uri: string, client_details?: ClientDetails) => {
-  // RFC 6749 - Section 3.1.2 - sanitize redirect_uri
-  const redirect_uri_ = new URL(redirect_uri);
-  const redirect_uri_sane = redirect_uri_.origin + redirect_uri_.pathname + redirect_uri_.search;
-  // lookup openid configuration of idp
-  const idp_origin = new URL(idp).origin;
+type FedCMData = {
+  token: string
+  configURL: string
+}
+
+const fedCMLogin = async (client_details: ClientDetails, database?: SessionDatabase): Promise<SessionInformation> => {
+  if (!client_details.client_id) throw new Error('FedCM requires Client ID URL')
+
+  // RFC 7636 PKCE, remember code verifer
+  const { pkce_code_verifier, pkce_code_challenge } = await getPKCEcode();
+  sessionStorage.setItem("pkce_code_verifier", pkce_code_verifier);
+
+  // RFC 6749 OAuth 2.0 - CSRF token
+  const csrf_token = window.crypto.randomUUID();
+  sessionStorage.setItem("csrf_token", csrf_token);
+
+  const credential = await navigator.credentials.get({
+    // @ts-ignore
+    identity: {
+      providers: [{
+        configURL: 'any',
+        clientId: client_details.client_id,
+        registered: true,
+        params: {
+          code_challenge: pkce_code_challenge,
+          code_challenge_method: 'S256',
+          // TODO: test without
+          state: csrf_token
+        }
+      }]
+    }
+  }) as unknown as FedCMData;
+
+  const fedCMissuer = new URL(credential.configURL).origin
+
+  // XXX: we ♥️ trailing slash errors
+  await lookupIdp(fedCMissuer + '/', fedCMissuer)
+
+  // XXX: figure out how to deal with state check!!!
+  // XXX: figure out how to deal issuer check!!!
+  return completeFlow({
+    authorization_code: credential.token,
+    idp: fedCMissuer + '/',
+    client_details,
+    database
+  })
+}
+
+const lookupIdp = async (idp: string, idp_origin: string) => {
   const openid_configuration =
     await fetch(`${idp_origin}/.well-known/openid-configuration`)
       .then((response) => {
@@ -42,6 +79,22 @@ const redirectForLogin = async (idp: string, redirect_uri: string, client_detail
     "jwks_uri",
     openid_configuration["jwks_uri"]
   );
+  return openid_configuration
+}
+
+/**
+ * Login with the idp, using a provided `client_id` or dynamic client registration if none provided.
+ *
+ * @param idp
+ * @param redirect_uri
+ */
+const redirectForLogin = async (idp: string, redirect_uri: string, client_details?: ClientDetails) => {
+  // RFC 6749 - Section 3.1.2 - sanitize redirect_uri
+  const redirect_uri_ = new URL(redirect_uri);
+  const redirect_uri_sane = redirect_uri_.origin + redirect_uri_.pathname + redirect_uri_.search;
+  // lookup openid configuration of idp
+  const idp_origin = new URL(idp).origin;
+  const openid_configuration = await lookupIdp(idp, idp_origin)
 
   let client_id = client_details?.client_id;
   // no client_id => attempt dynamic registration
@@ -120,7 +173,7 @@ const getPKCEcode = async () => {
  * get an access token for the authrization code.
  */
 const onIncomingRedirect = async (client_details?: ClientDetails, database?: SessionDatabase) => {
-  const url = new URL(window.location.href);
+  const url = new URL(window.location.href)
   // authorization code
   const authorization_code = url.searchParams.get("code");
   // if no code, session remains unauthenticated at this point
@@ -146,6 +199,32 @@ const onIncomingRedirect = async (client_details?: ClientDetails, database?: Ses
   url.searchParams.delete("code");
   window.history.pushState({}, document.title, url.toString());
 
+  const redirect_url = url.toString()
+
+  return completeFlow({
+    client_details,
+    redirect_url,
+    authorization_code,
+    idp,
+    database
+  })
+};
+
+type FlowData = {
+  client_details?: ClientDetails
+  redirect_url?: string
+  authorization_code: string
+  idp: string
+  database?: SessionDatabase
+}
+
+const completeFlow = async ({
+  client_details,
+  redirect_url,
+  authorization_code,
+  idp,
+  database
+}: FlowData) => {
   // prepare token request
   const pkce_code_verifier = sessionStorage.getItem("pkce_code_verifier");
   if (pkce_code_verifier === null) {
@@ -173,10 +252,10 @@ const onIncomingRedirect = async (client_details?: ClientDetails, database?: Ses
     await requestAccessToken(
       authorization_code,
       pkce_code_verifier,
-      url.toString(),
       client_id,
       token_endpoint,
-      key_pair
+      key_pair,
+      redirect_url
     )
       .then((response) => {
         if (!response.ok) {
@@ -216,7 +295,9 @@ const onIncomingRedirect = async (client_details?: ClientDetails, database?: Ses
   // summarise session info
   const token_details = { ...token_response, dpop_key_pair: key_pair } as TokenDetails;
   const idp_details = { idp, jwks_uri, token_endpoint } as IdentityProviderDetails
-  if (!client_details) client_details = { redirect_uris: [url.toString()] };
+
+  // XXX: figure out for FedCM
+  if (!client_details) client_details = { redirect_uris: [redirect_url!] };
   client_details.client_id = client_id;
 
   // and persist refresh token details
@@ -247,7 +328,8 @@ const onIncomingRedirect = async (client_details?: ClientDetails, database?: Ses
     idpDetails: idp_details,
     tokenDetails: token_details
   } as SessionInformation
-};
+
+}
 
 
 /**
@@ -263,10 +345,10 @@ const onIncomingRedirect = async (client_details?: ClientDetails, database?: Ses
 const requestAccessToken = async (
   authorization_code: string,
   pkce_code_verifier: string,
-  redirect_uri: string,
   client_id: string,
   token_endpoint: string,
-  key_pair: GenerateKeyPairResult<KeyLike>
+  key_pair: GenerateKeyPairResult<KeyLike>,
+  redirect_uri?: string,
 ) => {
   // prepare public key to bind access token to
   const jwk_public_key = await exportJWK(key_pair.publicKey);
@@ -285,6 +367,17 @@ const requestAccessToken = async (
     })
     .sign(key_pair.privateKey);
 
+  const params = {
+    grant_type: "authorization_code",
+    code: authorization_code,
+    code_verifier: pkce_code_verifier,
+    client_id: client_id,
+  }
+
+  // FedCM doesn't use redirects
+  // @ts-ignore
+  if (redirect_uri) params.redirect_uri = redirect_uri
+
   return fetch(
     token_endpoint,
     {
@@ -293,14 +386,8 @@ const requestAccessToken = async (
         dpop,
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code: authorization_code,
-        code_verifier: pkce_code_verifier,
-        redirect_uri: redirect_uri,
-        client_id: client_id,
-      }),
+      body: new URLSearchParams(params),
     });
 };
 
-export { redirectForLogin, onIncomingRedirect };
+export { redirectForLogin, fedCMLogin, onIncomingRedirect };
