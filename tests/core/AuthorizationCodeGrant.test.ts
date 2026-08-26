@@ -481,3 +481,107 @@ describe('onIncomingRedirect', () => {
 
 });
 
+
+describe('named sessions (session_name)', () => {
+  const mockOpenIdConfig = {
+    issuer: 'https://idp.example.com/',
+    authorization_endpoint: 'https://idp.example.com/auth',
+    token_endpoint: 'https://idp.example.com/token',
+    jwks_uri: 'https://idp.example.com/jwks',
+    registration_endpoint: 'https://idp.example.com/register',
+  };
+
+  const mockTokenResponse = {
+    access_token: 'mock-access-token',
+    refresh_token: 'mock-refresh-token',
+  };
+
+  const mockJwtPayload = {
+    iss: 'https://idp.example.com/',
+    aud: 'solid',
+    client_id: 'test-client',
+    cnf: { jkt: 'mock-thumbprint' },
+  };
+
+  // Pre-populate a pending login for session `left`,
+  // as if redirectForLogin('...', '...', details, 'left') had run.
+  const populatePendingLogin = (prefix: string, csrf: string) => {
+    sessionStorage.setItem(`${prefix}:idp`, 'https://idp.example.com/');
+    sessionStorage.setItem(`${prefix}:csrf_token`, csrf);
+    sessionStorage.setItem(`${prefix}:pkce_code_verifier`, 'mock-pkce-verifier');
+    sessionStorage.setItem(`${prefix}:token_endpoint`, 'https://idp.example.com/token');
+    sessionStorage.setItem(`${prefix}:jwks_uri`, 'https://idp.example.com/jwks');
+  };
+
+  it('redirectForLogin writes ONLY prefixed keys for a named session', async () => {
+    (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockOpenIdConfig),
+    });
+
+    await redirectForLogin('https://idp.example.com/', 'https://app.example.com/redirect', { client_id: 'test-client' } as ClientDetails, 'left');
+
+    expect(sessionStorage.setItem).toHaveBeenCalledWith('left:idp', 'https://idp.example.com/');
+    expect(sessionStorage.setItem).toHaveBeenCalledWith('left:token_endpoint', 'https://idp.example.com/token');
+    expect(sessionStorage.setItem).toHaveBeenCalledWith('left:pkce_code_verifier', expect.any(String));
+    expect(sessionStorage.setItem).toHaveBeenCalledWith('left:csrf_token', 'mock-random-uuid');
+    // and never the bare (default-session) keys
+    expect(sessionStorage.setItem).not.toHaveBeenCalledWith('idp', expect.anything());
+    expect(sessionStorage.setItem).not.toHaveBeenCalledWith('csrf_token', expect.anything());
+  });
+
+  it('onIncomingRedirect consumes a named pending login and cleans exactly its own keys', async () => {
+    populatePendingLogin('left', 'left-csrf');
+    populatePendingLogin('right', 'right-csrf'); // a second, concurrent pending login
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=left-csrf&iss=https://idp.example.com/');
+    (fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(mockTokenResponse),
+    });
+    (jose.jwtVerify as jest.Mock).mockResolvedValueOnce({ payload: mockJwtPayload });
+    (jose.calculateJwkThumbprint as jest.Mock).mockResolvedValueOnce('mock-thumbprint');
+
+    const result = await onIncomingRedirect({ client_id: 'test-client' } as ClientDetails, undefined, 'left');
+
+    expect(result.tokenDetails?.access_token).toBe('mock-access-token');
+    // left's pending login is cleaned ...
+    expect(sessionStorage.getItem('left:csrf_token')).toBeNull();
+    expect(sessionStorage.getItem('left:pkce_code_verifier')).toBeNull();
+    // ... while right's pending login is untouched
+    expect(sessionStorage.getItem('right:csrf_token')).toBe('right-csrf');
+    expect(sessionStorage.getItem('right:pkce_code_verifier')).toBe('mock-pkce-verifier');
+  });
+
+  it('a named session with no pending login ignores an authorization response without consuming it', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => { });
+    populatePendingLogin('left', 'left-csrf');
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=left-csrf&iss=https://idp.example.com/');
+
+    // `right` has NO pending login - it must not consume left's response
+    const result = await onIncomingRedirect({ client_id: 'test-client' } as ClientDetails, undefined, 'right');
+
+    expect(result.tokenDetails).toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled(); // no token exchange
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("session 'right'"));
+    // left's pending login survives, so left can still consume the response
+    expect(sessionStorage.getItem('left:csrf_token')).toBe('left-csrf');
+    warn.mockRestore();
+  });
+
+  it('a named session with a pending login still throws on a state mismatch', async () => {
+    populatePendingLogin('left', 'left-csrf');
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=WRONG&iss=https://idp.example.com/');
+
+    await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails, undefined, 'left'))
+      .rejects.toThrow('RFC 6749 - state !== csrf_token');
+  });
+
+  it('the default (unnamed) session keeps its loud failure on an unsolicited response', async () => {
+    // no pending login at all for the default session
+    mockLocation('https://app.example.com/redirect?code=auth-code&state=whatever&iss=https://idp.example.com/');
+
+    await expect(onIncomingRedirect({ client_id: 'test-client' } as ClientDetails))
+      .rejects.toThrow('RFC 9207 - iss !== idp');
+  });
+});
+

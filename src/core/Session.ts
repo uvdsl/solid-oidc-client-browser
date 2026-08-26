@@ -2,11 +2,22 @@ import { SignJWT, decodeJwt, exportJWK } from "jose";
 import { redirectForLogin, onIncomingRedirect } from "./AuthorizationCodeGrant";
 import { renewTokens } from "./RefreshTokenGrant";
 import { SessionDatabase } from "./SessionDatabase";
+import { normalizeSessionName } from "./SessionName";
 import { DynamicRegistrationClientDetails, DereferencableIdClientDetails, SessionInformation, TokenDetails } from "./SessionInformation";
 
 
 export interface SessionOptions {
   database?: SessionDatabase
+  /**
+   * Optional session name, for running more than one session on the same
+   * origin. A static, application-chosen constant (never user input),
+   * matching `[A-Za-z0-9_-]+`. It namespaces this session's browser storage
+   * from other sessions'. Named sessions are namespaced for bookkeeping,
+   * NOT isolated from each other: every script on the origin remains fully
+   * trusted, exactly as with a single session.
+   * Omitted (or empty): the default, unnamed session.
+   */
+  name?: string;
   onSessionStateChange?: (event?: Event) => void;
   onSessionExpirationWarning?: (event?: Event) => void;
   onSessionExpiration?: (event?: Event) => void;
@@ -95,6 +106,7 @@ export class SessionCore extends EventTarget implements Session {
 
   private information: SessionInformation;
   private database?: SessionDatabase;
+  private name_?: string;
 
   protected refreshPromise?: Promise<void>;
   protected resolveRefresh?: (() => void);
@@ -105,6 +117,7 @@ export class SessionCore extends EventTarget implements Session {
     this.authFetch = this.authFetch.bind(this);
     this.information = { clientDetails } as SessionInformation;
     this.database = sessionOptions?.database
+    this.name_ = normalizeSessionName(sessionOptions?.name);
     if (sessionOptions?.onSessionStateChange)
       this.addEventListener(SessionEvents.STATE_CHANGE, (event: Event) => sessionOptions.onSessionStateChange?.(event))
     if (sessionOptions?.onSessionExpirationWarning)
@@ -114,7 +127,7 @@ export class SessionCore extends EventTarget implements Session {
   }
 
   async login(idp: string, redirect_uri: string) {
-    await redirectForLogin(idp, redirect_uri, this.information.clientDetails)
+    await redirectForLogin(idp, redirect_uri, this.information.clientDetails, this.name_)
   }
 
   /**
@@ -125,7 +138,7 @@ export class SessionCore extends EventTarget implements Session {
    */
   async handleRedirectFromLogin() {
     // Redirect after Authorization Code Grant // memory via sessionStorage
-    const newSessionInfo = await onIncomingRedirect(this.information.clientDetails, this.database);
+    const newSessionInfo = await onIncomingRedirect(this.information.clientDetails, this.database, this.name_);
     // no session - we remain unauthenticated
     if (!newSessionInfo.tokenDetails) return;
     // we got a session
@@ -290,6 +303,13 @@ export class SessionCore extends EventTarget implements Session {
 
   get webId() {
     return this.webId_;
+  }
+
+  /**
+   * The normalized session name, or `undefined` for the default session.
+   */
+  get name() {
+    return this.name_;
   }
 
   isExpired() {

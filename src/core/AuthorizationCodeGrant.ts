@@ -2,14 +2,17 @@ import { createRemoteJWKSet, generateKeyPair, jwtVerify, exportJWK, SignJWT, Gen
 import { requestDynamicClientRegistration } from "./DynamicClientRegistration";
 import { ClientDetails, DynamicRegistrationClientDetails, IdentityProviderDetails, SessionInformation, TokenDetails } from "./SessionInformation";
 import { SessionDatabase } from "./SessionDatabase";
+import { storageKey } from "./SessionName";
 
 /**
  * Login with the idp, using a provided `client_id` or dynamic client registration if none provided.
  *
  * @param idp
  * @param redirect_uri
+ * @param client_details
+ * @param session_name optional session name namespacing this flow's sessionStorage keys
  */
-const redirectForLogin = async (idp: string, redirect_uri: string, client_details?: ClientDetails) => {
+const redirectForLogin = async (idp: string, redirect_uri: string, client_details?: ClientDetails, session_name?: string) => {
   // RFC 6749 - Section 3.1.2 - sanitize redirect_uri
   const redirect_uri_ = new URL(redirect_uri);
   const redirect_uri_sane = redirect_uri_.origin + redirect_uri_.pathname + redirect_uri_.search;
@@ -31,15 +34,15 @@ const redirectForLogin = async (idp: string, redirect_uri: string, client_detail
       "RFC 9207 - iss !== idp - " + issuer + " !== " + idp
     );
   }
-  sessionStorage.setItem("idp", issuer);
+  sessionStorage.setItem(storageKey(session_name, "idp"), issuer);
   // remember token endpoint
   sessionStorage.setItem(
-    "token_endpoint",
+    storageKey(session_name, "token_endpoint"),
     openid_configuration["token_endpoint"]
   );
   // remember jwks_uri for later token verification
   sessionStorage.setItem(
-    "jwks_uri",
+    storageKey(session_name, "jwks_uri"),
     openid_configuration["jwks_uri"]
   );
 
@@ -66,16 +69,16 @@ const redirectForLogin = async (idp: string, redirect_uri: string, client_detail
   try {
     new URL(client_id)
   } catch {
-    sessionStorage.setItem("client_id", client_id);
+    sessionStorage.setItem(storageKey(session_name, "client_id"), client_id);
   }
 
   // RFC 7636 PKCE, remember code verifer
   const { pkce_code_verifier, pkce_code_challenge } = await getPKCEcode();
-  sessionStorage.setItem("pkce_code_verifier", pkce_code_verifier);
+  sessionStorage.setItem(storageKey(session_name, "pkce_code_verifier"), pkce_code_verifier);
 
   // RFC 6749 OAuth 2.0 - CSRF token
   const csrf_token = window.crypto.randomUUID();
-  sessionStorage.setItem("csrf_token", csrf_token);
+  sessionStorage.setItem(storageKey(session_name, "csrf_token"), csrf_token);
 
   // redirect to idp
   const redirect_to_idp =
@@ -119,7 +122,7 @@ const getPKCEcode = async () => {
  * URL contains authrization code, issuer (idp) and state (csrf token),
  * get an access token for the authrization code.
  */
-const onIncomingRedirect = async (client_details?: ClientDetails, database?: SessionDatabase) => {
+const onIncomingRedirect = async (client_details?: ClientDetails, database?: SessionDatabase, session_name?: string) => {
   const url = new URL(window.location.href);
   // authorization code
   const authorization_code = url.searchParams.get("code");
@@ -127,17 +130,29 @@ const onIncomingRedirect = async (client_details?: ClientDetails, database?: Ses
   if (authorization_code === null) {
     return { clientDetails: client_details } as SessionInformation;
   }
+  // A named session with no pending login (no stored csrf token) does not
+  // consume the authorization response: with several sessions on one page,
+  // the response belongs to whichever session started the flow. The URL is
+  // left untouched so that session can still consume it - but say so, since
+  // an authorization response that nobody consumes is worth noticing.
+  // The default (unnamed) session keeps its loud failure below, unchanged.
+  if (session_name && sessionStorage.getItem(storageKey(session_name, "csrf_token")) === null) {
+    console.warn(
+      `solid-oidc-client-browser: session '${session_name}' ignores an authorization response - no login pending`
+    );
+    return { clientDetails: client_details } as SessionInformation;
+  }
   // RFC 9207 issuer check
-  const idp = sessionStorage.getItem("idp");
+  const idp = sessionStorage.getItem(storageKey(session_name, "idp"));
   if (idp === null || url.searchParams.get("iss") !== idp) {
     throw new Error(
       "RFC 9207 - iss !== idp - " + url.searchParams.get("iss") + " !== " + idp
     );
   }
   // RFC 6749 OAuth 2.0
-  if (url.searchParams.get("state") !== sessionStorage.getItem("csrf_token")) {
+  if (url.searchParams.get("state") !== sessionStorage.getItem(storageKey(session_name, "csrf_token"))) {
     throw new Error(
-      "RFC 6749 - state !== csrf_token - " + url.searchParams.get("state") + " !== " + sessionStorage.getItem("csrf_token")
+      "RFC 6749 - state !== csrf_token - " + url.searchParams.get("state") + " !== " + sessionStorage.getItem(storageKey(session_name, "csrf_token"))
     );
   }
   // remove redirect query parameters from URL
@@ -147,19 +162,19 @@ const onIncomingRedirect = async (client_details?: ClientDetails, database?: Ses
   window.history.pushState({}, document.title, url.toString());
 
   // prepare token request
-  const pkce_code_verifier = sessionStorage.getItem("pkce_code_verifier");
+  const pkce_code_verifier = sessionStorage.getItem(storageKey(session_name, "pkce_code_verifier"));
   if (pkce_code_verifier === null) {
     throw new Error(
       "Access Token Request preparation - Could not find in sessionStorage: pkce_code_verifier"
     );
   }
-  const client_id = client_details?.client_id || sessionStorage.getItem("client_id");
+  const client_id = client_details?.client_id || sessionStorage.getItem(storageKey(session_name, "client_id"));
   if (!client_id) {
     throw new Error(
       "Access Token Request preparation - Could not find in sessionStorage: client_id (dynamic registration)"
     );
   }
-  const token_endpoint = sessionStorage.getItem("token_endpoint");
+  const token_endpoint = sessionStorage.getItem(storageKey(session_name, "token_endpoint"));
   if (token_endpoint === null) {
     throw new Error(
       "Access Token Request preparation - Could not find in sessionStorage: token_endpoint"
@@ -187,7 +202,7 @@ const onIncomingRedirect = async (client_details?: ClientDetails, database?: Ses
 
   // verify access_token // ! Solid-OIDC specification says it should be a dpop-bound `id token` but implementations provide a dpop-bound `access token`
   const accessToken = token_response["access_token"];
-  const jwks_uri = sessionStorage.getItem("jwks_uri");
+  const jwks_uri = sessionStorage.getItem(storageKey(session_name, "jwks_uri"));
   if (jwks_uri === null) {
     throw new Error(
       "Access Token validation preparation - Could not find in sessionStorage: jwks_uri"
@@ -234,12 +249,12 @@ const onIncomingRedirect = async (client_details?: ClientDetails, database?: Ses
   }
 
   // clean session storage
-  sessionStorage.removeItem("csrf_token");
-  sessionStorage.removeItem("pkce_code_verifier");
-  sessionStorage.removeItem("idp");
-  sessionStorage.removeItem("jwks_uri");
-  sessionStorage.removeItem("token_endpoint");
-  sessionStorage.removeItem("client_id");
+  sessionStorage.removeItem(storageKey(session_name, "csrf_token"));
+  sessionStorage.removeItem(storageKey(session_name, "pkce_code_verifier"));
+  sessionStorage.removeItem(storageKey(session_name, "idp"));
+  sessionStorage.removeItem(storageKey(session_name, "jwks_uri"));
+  sessionStorage.removeItem(storageKey(session_name, "token_endpoint"));
+  sessionStorage.removeItem(storageKey(session_name, "client_id"));
 
   // return session information
   return {

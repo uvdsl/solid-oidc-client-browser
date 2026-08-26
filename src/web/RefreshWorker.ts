@@ -1,12 +1,14 @@
 import { decodeJwt } from "jose";
 import { renewTokens } from "../core/RefreshTokenGrant";
 import { TokenDetails } from "../core/SessionInformation";
+import { databaseName } from "../core/SessionName";
 import { SessionIDB } from "./SessionDatabase";
 import { SessionDatabase } from "../core/SessionDatabase";
 import { RefreshMessageTypes } from "./RefreshMessageTypes";
 
 interface SharedWorker { // to make tsc happy
     onconnect: (event: MessageEvent) => void;
+    name: string;
 }
 declare const self: SharedWorker; // to make tsc happy
 
@@ -23,9 +25,12 @@ let refresher: Refresher;
 self.onconnect = (event: MessageEvent) => {
     const port = event.ports[0];
     ports.add(port);
-    // lazy init
+    // lazy init - a named worker (SharedWorker identity includes its name)
+    // is bound to that session's own database; the unnamed worker (name '')
+    // keeps the default database.
     if (!refresher) {
-        refresher = new Refresher(broadcast, new SessionIDB());
+        const dbName = databaseName(self.name || undefined);
+        refresher = new Refresher(broadcast, new SessionIDB(dbName), dbName);
     }
     // handle messages
     port.onmessage = (event: MessageEvent) => {
@@ -35,7 +40,7 @@ self.onconnect = (event: MessageEvent) => {
                 refresher.handleSchedule(payload);
                 break;
             case RefreshMessageTypes.REFRESH:
-                refresher.handleRefresh(port);
+                refresher.handleRefresh(port, payload?.dbName);
                 break;
             case RefreshMessageTypes.STOP:
                 refresher.handleStop();
@@ -58,20 +63,42 @@ export class Refresher {
 
     private broadcast: (message: any) => void;
     private database: SessionDatabase;
+    private dbName?: string;
 
     private refreshPromise?: Promise<void>;
 
 
     constructor(
         broadcast: (message: string) => void,
-        database: SessionDatabase
+        database: SessionDatabase,
+        dbName?: string
     ) {
         this.broadcast = broadcast;
         this.database = database;
+        this.dbName = dbName;
     }
 
-    async handleSchedule(tokenDetails: TokenDetails) {
-        this.tokenDetails = tokenDetails;
+    /**
+     * A page expecting one storage namespace must never be served tokens from
+     * another. A mismatch means a stale HTTP-cached copy of this worker script
+     * is running for a named session, or page and worker have drifted in how
+     * they derive the database name. Fail loudly instead of serving tokens.
+     */
+    private guardDbName(expected?: string): boolean {
+        if (expected && this.dbName && expected !== this.dbName) {
+            this.broadcast({
+                type: RefreshMessageTypes.ERROR_ON_REFRESH,
+                error: `RefreshWorker storage mismatch: the page expects '${expected}' but this worker is bound to '${this.dbName}'. A stale cached RefreshWorker.js can cause this - reload the page.`
+            });
+            return false;
+        }
+        return true;
+    }
+
+    async handleSchedule(payload: TokenDetails & { dbName?: string }) {
+        const { dbName, ...tokenDetails } = payload as any;
+        if (!this.guardDbName(dbName)) return;
+        this.tokenDetails = tokenDetails as TokenDetails;
         this.exp = decodeJwt(this.tokenDetails.access_token).exp;
         this.broadcast({
             type: RefreshMessageTypes.TOKEN_DETAILS,
@@ -82,7 +109,8 @@ export class Refresher {
         this.timersAreRunning = true;
     }
 
-    async handleRefresh(requestingPort: any): Promise<void> {
+    async handleRefresh(requestingPort: any, expectedDbName?: string): Promise<void> {
+        if (!this.guardDbName(expectedDbName)) return;
         if (this.tokenDetails && this.exp && !this.isTokenExpired(this.exp)) {
             console.log(`[RefreshWorker] Providing current tokens`);
             requestingPort.postMessage({

@@ -1,32 +1,45 @@
 import { DereferencableIdClientDetails, DynamicRegistrationClientDetails } from '../core';
 import { SessionOptions, SessionCore } from '../core/Session';
+import { databaseName, normalizeSessionName } from '../core/SessionName';
 import { getWorkerUrl } from './RefreshWorkerUrl';
 import { RefreshMessageTypes } from './RefreshMessageTypes';
 import { SessionIDB } from './SessionDatabase';
 
 // Any provided database via SessionOptions will be ignored.
-// Database will be an IndexedDB.
+// Database will be an IndexedDB, one database per session name.
 export interface WebWorkerSessionOptions extends SessionOptions {
     workerUrl?: string | URL;
 }
 
 /**
  * This Session provides background token refreshing using a Web Worker.
+ * A named session (see {@link SessionOptions.name}) gets its own IndexedDB
+ * and its own SharedWorker, so several sessions can coexist on one origin.
  */
 export class WebWorkerSession extends SessionCore {
     private worker: SharedWorker;
+    // The database name this session expects its worker to be bound to.
+    // Sent with SCHEDULE/REFRESH so a mismatched worker fails loudly
+    // instead of serving tokens from another session's database.
+    private dbName: string;
 
     constructor(
         clientDetails?: DereferencableIdClientDetails | DynamicRegistrationClientDetails,
         sessionOptions?: WebWorkerSessionOptions
     ) {
-        const database = new SessionIDB();
-        const options = { ...sessionOptions, database };
+        const name = normalizeSessionName(sessionOptions?.name);
+        const database = new SessionIDB(databaseName(name));
+        const options = { ...sessionOptions, name, database };
         super(clientDetails, options);
+        this.dbName = databaseName(name);
 
         // Allow consumer to provide worker URL, or use default
-        const workerUrl = sessionOptions?.workerUrl ?? getWorkerUrl()
-        this.worker = new SharedWorker(workerUrl, { type: 'module' });
+        const workerUrl = sessionOptions?.workerUrl ?? getWorkerUrl(name)
+        // SharedWorker identity is (origin, URL, name): a named session gets
+        // its own worker, bound to its own database via the worker's self.name.
+        this.worker = name
+            ? new SharedWorker(workerUrl, { type: 'module', name })
+            : new SharedWorker(workerUrl, { type: 'module' });
         this.worker.port.onmessage = (event) => {
             this.handleWorkerMessage(event.data).catch(console.error);
         };
@@ -79,7 +92,7 @@ export class WebWorkerSession extends SessionCore {
         if (this.isActive) { // If login was successful, tell the worker to schedule refreshing
             this.worker.port.postMessage({
                 type: RefreshMessageTypes.SCHEDULE,
-                payload: { ...this.getTokenDetails(), expires_in: this.getExpiresIn() }
+                payload: { ...this.getTokenDetails(), expires_in: this.getExpiresIn(), dbName: this.dbName }
             });
         }
     }
@@ -92,7 +105,7 @@ export class WebWorkerSession extends SessionCore {
             this.resolveRefresh = resolve;
             this.rejectRefresh = reject;
         });
-        this.worker.port.postMessage({ type: RefreshMessageTypes.REFRESH });
+        this.worker.port.postMessage({ type: RefreshMessageTypes.REFRESH, payload: { dbName: this.dbName } });
         return this.refreshPromise;
     }
 

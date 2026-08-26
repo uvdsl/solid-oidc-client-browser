@@ -76,6 +76,23 @@ There is a small library that provides [Solid Requests](https://github.com/uvdsl
 If you don't want to dabble with parsing the retrieved RDF data manually, check out the [Solid RDF Store](https://github.com/uvdsl/solid-rdf-store).
 You can use the `session` object in that store to let the store fetch (authenticated) RDF data from the Web and have reactive query results, i.e. results that can update reactively when query underlying data changes.
 
+#### Multiple sessions in one app (named sessions)
+
+One app may need to hold several user identities at once - say, comparing two Pods side by side.
+Give each session a static name:
+
+```ts
+const left = new Session({ redirect_uris: [window.location.href], client_name: "My Solid App" }, { name: "left" });
+const right = new Session({ redirect_uris: [window.location.href], client_name: "My Solid App" }, { name: "right" });
+```
+
+A named session keeps its own login state, its own IndexedDB, and its own refresh worker, so the sessions never interfere with each other's tokens.
+On the redirect back from the identity provider, call `handleRedirectFromLogin()` on the session that started the login; a named session with no login pending ignores the redirect (and logs a warning), so the initiating session can consume it.
+
+The name is a static application constant matching `[A-Za-z0-9_-]+` - never derive it from user input.
+Named sessions are namespaced for **bookkeeping**, not isolated from each other: every script on the origin can still reach every session's storage, exactly as with a single session.
+They are for one app holding several identities - **not** for separating distinct apps on one origin (see the security considerations below).
+
 
 ## Security Considerations
 
@@ -121,10 +138,9 @@ If you think that the two Solid Apps should still have distinct `client_id`, the
 To summarise the point: The question on multiple apps on the same origin is to be answered by considering the conceptual relation of the multiple apps with regards to the browers' security mechansims. 
 
 
-We - as in this library - cannot manage distinct sessions via the `IndexedDB API` securely. Not because we do not want to but because the browser does not provide us a more granular and secure (!) option. Of course, we could provide different databases for different paths on an origin.
-But all these databases would still be accessible from any path on the origin.
+We - as in this library - cannot **isolate** distinct sessions via the `IndexedDB API`. Not because we do not want to but because the browser does not provide us a more granular and secure (!) option. Named sessions (see Quick Start) give each session its own database, but all these databases are still accessible from any path on the origin.
 
-Do you really want distinct logins and distinct sessions? This is not a question of concept but a question of security. You MUST deploy the apps on different origins.
+Named sessions are therefore bookkeeping for one app that holds several identities, within one security context - they are no security boundary between apps. Do you really want distinct apps with distinct logins? This is not a question of concept but a question of security. You MUST deploy the apps on different origins.
 
 ---
 

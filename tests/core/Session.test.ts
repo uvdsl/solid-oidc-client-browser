@@ -137,7 +137,8 @@ describe('SessionCore', () => {
             expect(AuthCodeGrant.redirectForLogin).toHaveBeenCalledWith(
                 'https://idp.example',
                 'https://app.example/callback',
-                mockClientDetails
+                mockClientDetails,
+                undefined // the default, unnamed session
             );
         });
     });
@@ -154,7 +155,7 @@ describe('SessionCore', () => {
 
             // Assert
             expect(AuthCodeGrant.onIncomingRedirect).toHaveBeenCalledTimes(1);
-            expect(AuthCodeGrant.onIncomingRedirect).toHaveBeenCalledWith(mockClientDetails, mockDb);
+            expect(AuthCodeGrant.onIncomingRedirect).toHaveBeenCalledWith(mockClientDetails, mockDb, undefined);
             expect(session.isActive).toBe(true);
             expect(session.webId).toBe('https://alice.example/card#me');
             expect((session as any).information).toEqual(mockSessionInfo);

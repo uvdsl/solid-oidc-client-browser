@@ -733,4 +733,70 @@ describe('Refresher', () => {
         });
 
     });
+
+    describe('database-name guard (named sessions)', () => {
+        let guarded: Refresher;
+
+        beforeEach(() => {
+            guarded = new Refresher(mockBroadcast, mockDb, 'soidc:left');
+        });
+
+        it('refuses SCHEDULE from a page expecting a different database', async () => {
+            await guarded.handleSchedule({ ...mockTokenDetails, dbName: 'soidc' } as any);
+
+            expect(mockBroadcast).toHaveBeenCalledWith({
+                type: RefreshMessageTypes.ERROR_ON_REFRESH,
+                error: expect.stringContaining('storage mismatch'),
+            });
+            expect(guarded.getTokenDetails()).toBeUndefined();
+            expect(guarded.getTimersAreRunning()).toBe(false);
+        });
+
+        it('accepts SCHEDULE from a page expecting this database, and stores tokenDetails without the dbName field', async () => {
+            await guarded.handleSchedule({ ...mockTokenDetails, dbName: 'soidc:left' } as any);
+
+            expect(guarded.getTokenDetails()).toEqual(mockTokenDetails);
+            expect(guarded.getTimersAreRunning()).toBe(true);
+        });
+
+        it('refuses REFRESH from a page expecting a different database, without touching the database', async () => {
+            await guarded.handleRefresh(mockPort, 'soidc');
+
+            expect(mockBroadcast).toHaveBeenCalledWith({
+                type: RefreshMessageTypes.ERROR_ON_REFRESH,
+                error: expect.stringContaining('storage mismatch'),
+            });
+            expect(RefreshGrant.renewTokens).not.toHaveBeenCalled();
+            expect(mockPort.postMessage).not.toHaveBeenCalled();
+        });
+
+        it('serves REFRESH from a page expecting this database', async () => {
+            await guarded.handleSchedule({ ...mockTokenDetails, dbName: 'soidc:left' } as any);
+            await guarded.handleRefresh(mockPort, 'soidc:left');
+
+            expect(mockPort.postMessage).toHaveBeenCalledWith({
+                type: RefreshMessageTypes.TOKEN_DETAILS,
+                payload: { tokenDetails: mockTokenDetails },
+            });
+        });
+
+        it('tolerates messages without a dbName (pages from before the handshake)', async () => {
+            await guarded.handleSchedule(mockTokenDetails);
+            expect(guarded.getTimersAreRunning()).toBe(true);
+
+            await guarded.handleRefresh(mockPort);
+            expect(mockPort.postMessage).toHaveBeenCalledWith({
+                type: RefreshMessageTypes.TOKEN_DETAILS,
+                payload: { tokenDetails: mockTokenDetails },
+            });
+        });
+
+        it('a Refresher without a bound dbName never guards (existing single-session behavior)', async () => {
+            await refresher.handleSchedule({ ...mockTokenDetails, dbName: 'anything' } as any);
+            expect(refresher.getTimersAreRunning()).toBe(true);
+            expect(mockBroadcast).not.toHaveBeenCalledWith(expect.objectContaining({
+                error: expect.stringContaining('storage mismatch'),
+            }));
+        });
+    });
 });

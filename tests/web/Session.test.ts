@@ -137,7 +137,7 @@ describe('WebWorkerSession', () => {
 
             expect(mockSharedWorkerPort.postMessage).toHaveBeenCalledWith({
                 type: RefreshMessageTypes.SCHEDULE,
-                payload: mockTokenDetails,
+                payload: { ...mockTokenDetails, dbName: 'soidc' },
             });
         });
 
@@ -190,6 +190,7 @@ describe('WebWorkerSession', () => {
 
             expect(mockSharedWorkerPort.postMessage).toHaveBeenCalledWith({
                 type: RefreshMessageTypes.REFRESH,
+                payload: { dbName: 'soidc' },
             });
         });
 
@@ -564,6 +565,60 @@ describe('WebWorkerSession', () => {
 
             // Only the second promise should resolve (it overwrites the first)
             await expect(promise2).resolves.toBeUndefined();
+        });
+    });
+
+    describe('named sessions', () => {
+        it('a named session gets its own database and its own named SharedWorker', () => {
+            createSession({ name: 'left' });
+
+            expect(SessionIDB).toHaveBeenLastCalledWith('soidc:left');
+            expect(SharedWorker).toHaveBeenLastCalledWith(
+                expect.any(URL),
+                { type: 'module', name: 'left' }
+            );
+        });
+
+        it('the default session keeps the default database and an unnamed worker - byte-identical', () => {
+            createSession();
+
+            expect(SessionIDB).toHaveBeenLastCalledWith('soidc');
+            expect(SharedWorker).toHaveBeenLastCalledWith(
+                expect.any(URL),
+                { type: 'module' }
+            );
+        });
+
+        it('an empty-string name is the default session, so it cannot fork the storage namespace', () => {
+            createSession({ name: '' });
+
+            expect(SessionIDB).toHaveBeenLastCalledWith('soidc');
+            expect(SharedWorker).toHaveBeenLastCalledWith(
+                expect.any(URL),
+                { type: 'module' }
+            );
+        });
+
+        it('an invalid name throws instead of guessing a namespace', () => {
+            expect(() => createSession({ name: 'not ok' })).toThrow(TypeError);
+            expect(() => createSession({ name: 'soidc:x' })).toThrow(TypeError);
+        });
+
+        it('SCHEDULE and REFRESH carry the named session\'s expected database name', async () => {
+            const named = createSession({ name: 'left' });
+            jest.spyOn((named as any), 'getExpiresIn').mockReturnValue(3600);
+
+            await named.handleRedirectFromLogin();
+            expect(mockSharedWorkerPort.postMessage).toHaveBeenCalledWith({
+                type: RefreshMessageTypes.SCHEDULE,
+                payload: { ...mockTokenDetails, dbName: 'soidc:left' },
+            });
+
+            named.restore();
+            expect(mockSharedWorkerPort.postMessage).toHaveBeenCalledWith({
+                type: RefreshMessageTypes.REFRESH,
+                payload: { dbName: 'soidc:left' },
+            });
         });
     });
 
