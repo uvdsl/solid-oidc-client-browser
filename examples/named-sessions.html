@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<!--
+  Named sessions: two independent logins on one page.
+  Run: npm run build, then serve the repo root (e.g. python3 -m http.server 8973)
+  and open http://localhost:8973/examples/named-sessions.html
+-->
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Two sessions, one page — named sessions</title>
+<style>
+  :root { color-scheme: light dark; --line:#d9d4c7; --dim:#45443d; --accent:#6a8a5a; }
+  @media (prefers-color-scheme: dark) { :root { --dim:#c2c0b4; } }
+  body { font: 19px/1.6 system-ui, sans-serif; max-width: 60rem; margin: 2rem auto; padding: 0 1.1rem; }
+  h1 { font-size: 1.7rem; margin: 0 0 .2rem; }
+  p.lede { color: var(--dim); margin-top: 0; margin-bottom: 1.4rem; }
+  .sides { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+  .side { flex: 1 1 22rem; border: 1px solid var(--line); border-radius: 10px; padding: 1rem 1.2rem 1.2rem; }
+  h2 { font-size: 1.2rem; margin: 0 0 .4rem; }
+  label { display: block; font-weight: 600; margin: .6rem 0 .2rem; }
+  input[type=url] { width: 100%; padding: .5rem .6rem; font: inherit; border: 1px solid var(--line);
+    border-radius: 8px; box-sizing: border-box; background: Field; color: FieldText; }
+  button { font: inherit; margin: .8rem .5rem 0 0; padding: .45rem .9rem; border-radius: 8px;
+    border: 1px solid var(--line); cursor: pointer; }
+  button.login { background: var(--accent); color: #fff; border: none; }
+  .who { margin: .9rem 0 0; word-break: break-all; }
+</style>
+</head>
+<body>
+<h1>Two sessions, one page</h1>
+<p class="lede">Each panel is its own named session — <code>left</code> and <code>right</code> —
+with its own login, its own storage and its own token refresh. Sign the panels in
+with different accounts or providers to hold two identities at once.</p>
+
+<div class="sides">
+  <section class="side" id="left">
+    <h2>Left identity</h2>
+    <label for="left-issuer">Identity provider</label>
+    <input type="url" id="left-issuer" class="issuer" value="https://solidcommunity.net">
+    <p>
+      <button class="login">Sign in</button>
+      <button class="fetch">Fetch my profile</button>
+      <button class="logout">Sign out</button>
+    </p>
+    <p class="who">Signed out.</p>
+  </section>
+
+  <section class="side" id="right">
+    <h2>Right identity</h2>
+    <label for="right-issuer">Identity provider</label>
+    <input type="url" id="right-issuer" class="issuer" value="https://solidcommunity.net">
+    <p>
+      <button class="login">Sign in</button>
+      <button class="fetch">Fetch my profile</button>
+      <button class="logout">Sign out</button>
+    </p>
+    <p class="who">Signed out.</p>
+  </section>
+</div>
+
+<script type="module">
+import { Session } from '../dist/esm/web/index.js';
+
+const REDIRECT = location.origin + location.pathname;
+
+const panel = (name) => {
+  const root = document.getElementById(name);
+  const $ = (sel) => root.querySelector(sel);
+  const session = new Session(
+    { redirect_uris: [REDIRECT], client_name: `Named-sessions example (${name})` },
+    { name }
+  );
+  const show = (text) => {
+    $('.who').textContent = text
+      ?? (session.isActive ? `Signed in as ${session.webId}` : 'Signed out.');
+  };
+  $('.login').onclick = () =>
+    session.login($('.issuer').value.trim(), REDIRECT)
+      .catch((e) => show(`sign-in failed to start: ${e.message}`));
+  $('.logout').onclick = async () => { await session.logout(); show(); };
+  $('.fetch').onclick = async () => {
+    if (!session.isActive) { show('Sign in first.'); return; }
+    const res = await session.authFetch(session.webId, { headers: { accept: 'text/turtle' } })
+      .catch((e) => ({ status: `failed: ${e.message}` }));
+    show(`GET profile → HTTP ${res.status}, as ${session.webId}`);
+  };
+  return { session, show };
+};
+
+const left = panel('left');
+const right = panel('right');
+
+// Back from a provider, each named session consumes only its own pending
+// login; the other logs a console warning and stays as it was.
+try { await left.session.handleRedirectFromLogin(); } catch (e) { left.show(`sign-in failed: ${e.message}`); }
+try { await right.session.handleRedirectFromLogin(); } catch (e) { right.show(`sign-in failed: ${e.message}`); }
+
+// A session signed in on an earlier visit comes back from its own storage.
+for (const p of [left, right]) {
+  if (!p.session.isActive) await p.session.restore().catch(() => { /* nothing to restore */ });
+  p.show();
+}
+</script>
+</body>
+</html>

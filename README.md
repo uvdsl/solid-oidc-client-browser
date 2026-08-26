@@ -89,6 +89,8 @@ const right = new Session({ redirect_uris: [window.location.href], client_name: 
 A named session keeps its own login state, its own IndexedDB, and its own refresh worker, so the sessions never interfere with each other's tokens.
 On the redirect back from the identity provider, call `handleRedirectFromLogin()` on the session that started the login; a named session with no login pending ignores the redirect (and logs a warning), so the initiating session can consume it.
 
+A runnable example: [`examples/named-sessions.html`](examples/named-sessions.html) — `npm run build`, serve the repo root, open the page, and sign the two panels in.
+
 The name is a static application constant matching `[A-Za-z0-9_-]+` - never derive it from user input.
 Named sessions are namespaced for **bookkeeping**, not isolated from each other: every script on the origin can still reach every session's storage, exactly as with a single session.
 They are for one app holding several identities - **not** for separating distinct apps on one origin (see the security considerations below).

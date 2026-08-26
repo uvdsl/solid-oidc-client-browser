@@ -11,6 +11,7 @@ If you have any questions, see the issues and discussions (e.g. [#18](https://gi
 - **Named sessions**: an optional static `name` in `SessionOptions` lets one app hold several sessions on the same origin (e.g. two Pods side by side). A named session namespaces its pending-login `sessionStorage` keys (`<name>:csrf_token`, ...), gets its own IndexedDB (`soidc:<name>`), and - in the `/web` build - its own `SharedWorker`. The default (unnamed) session is byte-identical to previous releases: same keys, same `soidc` database, same worker URL, so existing persisted sessions survive the upgrade. Named sessions are namespaced for bookkeeping, NOT isolated from each other - the same-origin trust model is unchanged, and they are no substitute for deploying distinct apps on distinct origins.
 - **Worker/page storage handshake**: the page sends the database name it expects with `SCHEDULE`/`REFRESH`; a worker bound to a different database answers with an error instead of serving tokens from the wrong session. Named sessions also fetch the worker script with a compat-version query so a stale HTTP-cached pre-namespacing worker can never serve a named session.
 - A named session that receives an authorization response while it has no login pending ignores it with a `console.warn`, leaving the response for the session that started the flow. The default session keeps its existing loud error.
+- A runnable example, `examples/named-sessions.html`: two independent logins on one page.
 
 ## [0.2.3] - 2026-06-18
 
