@@ -32,8 +32,38 @@ There is API documentation available in the [wiki](https://github.com/uvdsl/soli
 npm install @uvdsl/solid-oidc-client-browser
 ```
 
-#### via a CDN provider? Strongly discouraged!
+#### via a CDN provider (handle with care!)
+
 Please consider the security of your project! See also the [wiki](https://github.com/uvdsl/solid-oidc-client-browser/wiki/Security-Considerations#cdn-usage).
+
+The main bundle fetches the `RefreshWorker` bundle at runtime and verifies it against a build-time inlined SRI hash.
+When loading this library from a CDN, you **must** pin the main bundle itself with an SRI hash, otherwise the code you load may be tampered with.
+
+> **Note:** Always pin the version — an unpinned URL resolves to whatever is latest at request time, and its integrity will differ.
+
+Since import maps can carry integrity metadata for ES modules, you can pin the main bundle in your page like so (the hash is exposed by CDN providers via their metadata APIs, e.g. unpkg's `?meta` or jsDelivr's data API):
+```html
+<script type="importmap">
+  {
+    "imports": {
+      "solid-oidc-client-browser": "https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.3.0/dist/esm/web/index.js"
+    },
+    "integrity": {
+      "https://unpkg.com/@uvdsl/solid-oidc-client-browser@0.3.0/dist/esm/web/index.js": "sha256-<hash>"
+    }
+  }
+</script>
+
+<script type="module">
+  import { Session } from 'solid-oidc-client-browser';
+  // ...
+</script>
+```
+
+**Caveats:**
+
+- Browser support for import map integrity: Chrome/Edge 127+, Firefox 138+, Safari 18+ (see [MDN](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/script/type/importmap)).
+- Prefer CDNs that serve the package **as published** (unpkg, jsDelivr) and expose integrity metadata. Rewriting CDNs (e.g. esm.sh) transform the module — their output differs from the published tarball and exposes no integrity metadata.
 
 ## Quick Start
 

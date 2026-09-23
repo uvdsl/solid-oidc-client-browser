@@ -1,8 +1,9 @@
-import { WebWorkerSession, WebWorkerSessionOptions } from '../../src/web/Session';
-import { SessionCore, SessionEvents } from '../../src/core/Session';
-import { RefreshMessageTypes } from '../../src/web/RefreshMessageTypes';
-import { SessionIDB } from '../../src/web/SessionDatabase';
-import { TokenDetails } from '../../src/core/SessionInformation';
+import {WebWorkerSession, WebWorkerSessionOptions} from '../../src/web/Session';
+import {SessionCore, SessionEvents} from '../../src/core/Session';
+import {RefreshMessageTypes} from '../../src/web/RefreshMessageTypes';
+import {SessionIDB} from '../../src/web/SessionDatabase';
+import {TokenDetails} from '../../src/core/SessionInformation';
+import {SecureSharedWorker} from "../../src/web/SecureSharedWorker";
 
 // --- Mocks ---
 
@@ -12,6 +13,12 @@ jest.mock('../../src/web/RefreshWorkerUrl', () => ({
 }));
 
 jest.mock('../../src/web/SessionDatabase');
+
+jest.mock('../../src/web/SecureSharedWorker', () => ({
+  SecureSharedWorker: {
+    create: jest.fn(() => Promise.resolve({ port: mockSharedWorkerPort })),
+  }
+}));
 
 const mockSharedWorkerPort = {
     postMessage: jest.fn(),
@@ -41,20 +48,21 @@ describe('WebWorkerSession', () => {
     let mockOnSessionExpiration: jest.Mock;
     let mockOnSessionExpirationWarning: jest.Mock;
 
-    const createSession = (options?: Partial<WebWorkerSessionOptions>) => {
-        return new WebWorkerSession(undefined, {
-            onSessionStateChange: mockOnSessionStateChange,
-            onSessionExpiration: mockOnSessionExpiration,
-            onSessionExpirationWarning: mockOnSessionExpirationWarning,
-            ...options,
+    const createSession = async (options?: Partial<WebWorkerSessionOptions>) => {
+      return new WebWorkerSession(undefined, {
+          onSessionStateChange: mockOnSessionStateChange,
+          onSessionExpiration: mockOnSessionExpiration,
+          onSessionExpirationWarning: mockOnSessionExpirationWarning,
+          ...options,
         });
     };
 
     const triggerWorkerMessage = async (data: any) => {
+        await awaitWorkerPromise(session);
         await mockSharedWorkerPort.onmessage({ data });
     };
 
-    beforeEach(() => {
+    beforeEach(async () => {
         jest.clearAllMocks();
         mockSharedWorkerPort.onmessage = null;
         mockOnSessionStateChange = jest.fn(); // This can be removed, but is harmless
@@ -72,20 +80,21 @@ describe('WebWorkerSession', () => {
         jest.spyOn(SessionCore.prototype, 'isActive', 'get').mockReturnValue(true);
         // --- END OF NEW MOCKS ---
 
-        session = createSession();
+        session = await createSession();
     });
 
-    describe('Constructor', () => {
-        it('should create a SharedWorker with default URL', () => {
-            expect(SharedWorker).toHaveBeenCalledWith(
+    describe('worker setup', () => {
+        it('should create a SecureSharedWorker with default URL and integrity hash', async () => {
+            expect(SecureSharedWorker.create).toHaveBeenCalledWith(
                 expect.any(URL),
+                expect.stringMatching(/^sha384-/),
                 { type: 'module' }
             );
         });
 
-        it('should create a SharedWorker with custom workerUrl', () => {
+        it('should create a SharedWorker with custom workerUrl', async () => {
             const customUrl = 'http://custom.worker/url';
-            createSession({ workerUrl: customUrl });
+            await createSession({ workerUrl: customUrl });
 
             expect(SharedWorker).toHaveBeenCalledWith(customUrl, { type: 'module' });
         });
@@ -105,6 +114,16 @@ describe('WebWorkerSession', () => {
         it('should handle missing session options gracefully', () => {
             expect(() => new WebWorkerSession()).not.toThrow();
         });
+
+        it('should surface worker creation failure on first use (e.g. integrity verification)', async () => {
+            (SecureSharedWorker.create as jest.Mock).mockRejectedValueOnce(
+                new Error('integrity check failed')
+            );
+
+            const session = await createSession();
+            await expect(session.restore()).rejects.toThrow('integrity check failed');
+        });
+
     });
 
     describe('beforeunload event', () => {
@@ -185,8 +204,9 @@ describe('WebWorkerSession', () => {
     });
 
     describe('restore', () => {
-        it('should post REFRESH message to worker', () => {
+        it('should post REFRESH message to worker', async () => {
             session.restore();
+            await awaitWorkerPromise(session);
 
             expect(mockSharedWorkerPort.postMessage).toHaveBeenCalledWith({
                 type: RefreshMessageTypes.REFRESH,
@@ -568,3 +588,7 @@ describe('WebWorkerSession', () => {
     });
 
 });
+
+async function awaitWorkerPromise(session: WebWorkerSession) {
+  await (session as any).workerPromise
+}

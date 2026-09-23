@@ -717,6 +717,24 @@ describe('Refresher', () => {
         });
     });
 
+    describe('onconnect', () => {
+        const connectPort = () => {
+            const port = {
+                onmessage: null,
+                onmessageerror: null,
+                start: jest.fn(),
+                postMessage: jest.fn(),
+            };
+            (global as any).onconnect({ ports: [port] });
+            return port;
+        };
+
+        it('greets a newly connected port with a WORKER_ALIVE message', () => {
+            const port = connectPort();
+            expect(port.postMessage).toHaveBeenCalledWith({ type: RefreshMessageTypes.WORKER_ALIVE });
+        });
+    });
+
     describe('timer management', () => {
         it('should clear previous timers when rescheduling', async () => {
             let expires_in = 1000;

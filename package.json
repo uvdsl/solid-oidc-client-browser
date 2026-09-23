@@ -17,6 +17,8 @@
         "prebuild": "rimraf ./dist",
         "build": "run-s compile",
         "test": "jest --coverage",
+        "dev:cdn": "npx serve -l 4000 --cors dist",
+        "dev:app": "npx serve -l 3000 dev",
         "postbuild": "node ./scripts/prepare-package-json.js"
     },
     "browser": "./dist/esm/web/index.js",

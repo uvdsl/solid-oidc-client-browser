@@ -1,4 +1,5 @@
 export enum RefreshMessageTypes {
+    WORKER_ALIVE = 'WORKER_ALIVE',
     SCHEDULE = 'SCHEDULE',
     REFRESH = 'REFRESH',
     STOP = 'STOP',

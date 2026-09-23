@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>solid-oidc-client-browser – manual test</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; max-width: 60rem; }
+    input { width: 28rem; }
+    pre { background: #f4f4f4; padding: 1rem; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>Simulated CDN Setup</h1>
+  <p>@uvdsl/solid-oidc-client-browser is fetched from a different origin than the HTML page</p>
+  <p>Session status: <strong id="status">starting…</strong> <code id="webid"></code></p>
+
+  <p>
+    <label>IdP<br><input id="idp" size="40" value="https://solidcommunity.net/"></label><br>
+    <label>Resource to authFetch<br><input id="resource" size="40" placeholder="https://…/private/"></label>
+  </p>
+
+  <p>
+    <button id="login">Login</button>
+    <button id="logout">Logout</button>
+    <button id="fetch">authFetch</button>
+  </p>
+
+  <pre id="log"></pre>
+
+  <!--
+    Important: A production setup must add the integrity has for the main bundle as well.
+    It is skipped in this dev setup for the convenience of development, since the hash changes with every new build.
+
+    For production use (or for local testing of the full trust chain) add a block like:
+
+    "integrity": {
+      "http://localhost:4000/esm/web/index.js": "sha384-<bundle-integrity-hash>"
+    }
+   -->
+  <script type="importmap">
+    {
+      "imports": {
+        "solid-oidc-client-browser": "http://localhost:4000/esm/web/index.js"
+      }
+    }
+  </script>
+
+  <script type="module">
+    let Session, SessionEvents;
+    try {
+      ({ Session, SessionEvents } = await import('solid-oidc-client-browser'));
+    } catch (err) {
+      document.getElementById('status').textContent = 'module failed to load (integrity mismatch?)';
+      document.getElementById('log').textContent = err.message + '\n';
+      throw err;
+    }
+
+    const $ = (id) => document.getElementById(id);
+    const log = (...args) => {
+      $('log').textContent += args.map(a => typeof a === 'string' ? a : JSON.stringify(a, null, 2)).join(' ') + '\n';
+    };
+
+    const redirect_uri = window.location.origin + window.location.pathname;
+    const session = new Session({
+      redirect_uris: [redirect_uri],
+      client_name: 'Manual Test App',
+    });
+
+    session.addEventListener(SessionEvents.STATE_CHANGE, update);
+
+    function update() {
+      $('status').textContent = session.isActive ? 'active' : 'inactive';
+      $('webid').textContent = session.webId ?? '';
+    }
+
+    try {
+      await session.handleRedirectFromLogin();
+      await session.restore();
+    } catch (err) {
+      log(err.message);
+    }
+    update();
+
+    $('login').onclick = () =>
+      session.login($('idp').value, redirect_uri).catch(err => log('login failed:', err.message));
+
+    $('logout').onclick = () =>
+      session.logout().then(update).catch(err => log('logout failed:', err.message));
+
+    $('fetch').onclick = async () => {
+      try {
+        const res = await session.authFetch($('resource').value);
+        log('fetch', res.status, res.headers.get('content-type') ?? '');
+        log(await res.text());
+      } catch (err) {
+        log('fetch failed:', err.message);
+      }
+    };
+  </script>
+</body>
+</html>

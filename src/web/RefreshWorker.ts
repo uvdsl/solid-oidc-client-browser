@@ -47,6 +47,7 @@ self.onconnect = (event: MessageEvent) => {
     };
     port.onmessageerror = () => ports.delete(port);
     port.start();
+    port.postMessage({ type: RefreshMessageTypes.WORKER_ALIVE });
 };
 
 export class Refresher {

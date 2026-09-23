@@ -1,8 +1,11 @@
 import typescript from 'rollup-plugin-typescript2';
 import terser from '@rollup/plugin-terser';
 import resolve from '@rollup/plugin-node-resolve';
+import { createWorkerIntegrityPlugins } from './scripts/worker-integrity.js';
 
-const createConfig = (entry) => ({
+const { computeWorkerIntegrity, injectWorkerIntegrity } = createWorkerIntegrityPlugins();
+
+const createConfig = (entry, extraPlugins = []) => ({
   input: `src/${entry}/index.ts`,
   output: [
     {
@@ -23,13 +26,12 @@ const createConfig = (entry) => ({
       useTsconfigDeclarationDir: true,
     }),
     resolve({ browser: true }),
+    ...extraPlugins,
   ],
   treeshake: true,
 });
 
 export default [
-  createConfig('core'),
-  createConfig('web'),
   {
     input: 'src/web/RefreshWorker.ts',
     output: {
@@ -43,6 +45,9 @@ export default [
         tsconfigOverride: { compilerOptions: { declaration: false } }
       }),
       resolve({ browser: true }),
+      computeWorkerIntegrity,
     ],
   },
+  createConfig('core'),
+  createConfig('web', [injectWorkerIntegrity]),
 ];

@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 If you have any questions, see the issues and discussions (e.g. [#18](https://github.com/uvdsl/solid-oidc-client-browser/issues/18))
 
+## Unreleased
+
+### ✨ Features (Added)
+
+- **Secure Refresh Worker**: The refresh worker is fetched with a Subresource Integrity (SRI) hash that is computed at build time.
+
 ## [0.2.3] - 2026-06-18
 
 ### 🐛 Fixed
